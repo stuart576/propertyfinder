@@ -1,0 +1,11 @@
+services:
+  property-finder:
+    build: .
+    container_name: property-finder
+    restart: unless-stopped
+    ports:
+      - "${WEB_PORT:-8585}:${WEB_PORT:-8585}"
+    volumes:
+      - ./data:/data
+    env_file:
+      - .env

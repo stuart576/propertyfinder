@@ -1,0 +1,764 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Property Finder</title>
+    <link rel="preconnect" href="https://fonts.googleapis.com">
+    <link href="https://fonts.googleapis.com/css2?family=DM+Sans:wght@400;500;600;700&family=DM+Serif+Display&display=swap" rel="stylesheet">
+    <style>
+        :root {
+            --bg: #f5f2ed;
+            --bg-card: #ffffff;
+            --bg-dark: #2c2c2c;
+            --text: #2c2c2c;
+            --text-muted: #7a7568;
+            --text-light: #a09a8e;
+            --accent: #4a7c59;
+            --accent-light: #e8f0ea;
+            --accent-hover: #3d6649;
+            --border: #e2ddd5;
+            --star: #d4a843;
+            --danger: #c25b4e;
+            --danger-light: #fdf0ee;
+            --shadow-sm: 0 1px 2px rgba(0,0,0,0.06);
+            --shadow-md: 0 4px 12px rgba(0,0,0,0.08);
+            --shadow-lg: 0 8px 24px rgba(0,0,0,0.1);
+            --radius: 10px;
+            --radius-sm: 6px;
+        }
+
+        * { margin: 0; padding: 0; box-sizing: border-box; }
+
+        body {
+            font-family: 'DM Sans', sans-serif;
+            background: var(--bg);
+            color: var(--text);
+            line-height: 1.5;
+            min-height: 100vh;
+        }
+
+        /* ── Header ── */
+        .header {
+            background: var(--bg-dark);
+            color: white;
+            padding: 1.25rem 2rem;
+            display: flex;
+            align-items: center;
+            justify-content: space-between;
+            position: sticky;
+            top: 0;
+            z-index: 100;
+        }
+
+        .header h1 {
+            font-family: 'DM Serif Display', serif;
+            font-size: 1.5rem;
+            font-weight: 400;
+            letter-spacing: 0.02em;
+        }
+
+        .header h1 span {
+            color: var(--accent);
+            font-weight: 400;
+        }
+
+        .header-actions {
+            display: flex;
+            gap: 0.75rem;
+            align-items: center;
+        }
+
+        .btn {
+            display: inline-flex;
+            align-items: center;
+            gap: 0.4rem;
+            padding: 0.5rem 1rem;
+            border: none;
+            border-radius: var(--radius-sm);
+            font-family: inherit;
+            font-size: 0.825rem;
+            font-weight: 500;
+            cursor: pointer;
+            transition: all 0.15s ease;
+            text-decoration: none;
+        }
+
+        .btn-primary {
+            background: var(--accent);
+            color: white;
+        }
+        .btn-primary:hover { background: var(--accent-hover); }
+
+        .btn-ghost {
+            background: rgba(255,255,255,0.1);
+            color: rgba(255,255,255,0.8);
+            border: 1px solid rgba(255,255,255,0.15);
+        }
+        .btn-ghost:hover {
+            background: rgba(255,255,255,0.18);
+            color: white;
+        }
+
+        .btn-outline {
+            background: transparent;
+            color: var(--text-muted);
+            border: 1px solid var(--border);
+        }
+        .btn-outline:hover {
+            border-color: var(--accent);
+            color: var(--accent);
+        }
+        .btn-outline.active {
+            background: var(--accent-light);
+            border-color: var(--accent);
+            color: var(--accent);
+        }
+
+        /* ── Stats Bar ── */
+        .stats-bar {
+            display: flex;
+            gap: 1.5rem;
+            padding: 1rem 2rem;
+            background: var(--bg-card);
+            border-bottom: 1px solid var(--border);
+            flex-wrap: wrap;
+        }
+
+        .stat {
+            display: flex;
+            flex-direction: column;
+        }
+
+        .stat-value {
+            font-size: 1.4rem;
+            font-weight: 700;
+            color: var(--text);
+            line-height: 1.2;
+        }
+
+        .stat-label {
+            font-size: 0.7rem;
+            text-transform: uppercase;
+            letter-spacing: 0.08em;
+            color: var(--text-light);
+            font-weight: 500;
+        }
+
+        /* ── Controls ── */
+        .controls {
+            display: flex;
+            align-items: center;
+            justify-content: space-between;
+            padding: 1rem 2rem;
+            flex-wrap: wrap;
+            gap: 0.75rem;
+        }
+
+        .filter-group {
+            display: flex;
+            gap: 0.5rem;
+            align-items: center;
+            flex-wrap: wrap;
+        }
+
+        select.sort-select {
+            padding: 0.45rem 0.75rem;
+            border: 1px solid var(--border);
+            border-radius: var(--radius-sm);
+            font-family: inherit;
+            font-size: 0.825rem;
+            background: var(--bg-card);
+            color: var(--text);
+            cursor: pointer;
+        }
+
+        .result-count {
+            font-size: 0.85rem;
+            color: var(--text-muted);
+        }
+
+        /* ── Property Grid ── */
+        .property-grid {
+            display: grid;
+            grid-template-columns: repeat(auto-fill, minmax(340px, 1fr));
+            gap: 1.25rem;
+            padding: 0 2rem 2rem;
+        }
+
+        .property-card {
+            background: var(--bg-card);
+            border-radius: var(--radius);
+            border: 1px solid var(--border);
+            overflow: hidden;
+            transition: all 0.2s ease;
+            position: relative;
+        }
+
+        .property-card:hover {
+            box-shadow: var(--shadow-md);
+            border-color: var(--accent);
+        }
+
+        .property-card.dismissed {
+            opacity: 0.5;
+        }
+
+        .card-image {
+            width: 100%;
+            height: 180px;
+            background: linear-gradient(135deg, #e8e4de 0%, #d5cfc5 100%);
+            display: flex;
+            align-items: center;
+            justify-content: center;
+            position: relative;
+            overflow: hidden;
+        }
+
+        .card-image img {
+            width: 100%;
+            height: 100%;
+            object-fit: cover;
+        }
+
+        .card-image .placeholder-icon {
+            font-size: 2rem;
+            opacity: 0.3;
+        }
+
+        .card-source {
+            position: absolute;
+            top: 0.75rem;
+            left: 0.75rem;
+            background: var(--bg-dark);
+            color: white;
+            font-size: 0.65rem;
+            padding: 0.2rem 0.5rem;
+            border-radius: 3px;
+            text-transform: uppercase;
+            letter-spacing: 0.06em;
+            font-weight: 600;
+        }
+
+        .card-actions-top {
+            position: absolute;
+            top: 0.6rem;
+            right: 0.6rem;
+            display: flex;
+            gap: 0.35rem;
+        }
+
+        .icon-btn {
+            width: 30px;
+            height: 30px;
+            border-radius: 50%;
+            border: none;
+            display: flex;
+            align-items: center;
+            justify-content: center;
+            cursor: pointer;
+            font-size: 0.9rem;
+            transition: all 0.15s ease;
+            background: rgba(255,255,255,0.9);
+            color: var(--text-muted);
+            backdrop-filter: blur(4px);
+        }
+
+        .icon-btn:hover { background: white; box-shadow: var(--shadow-sm); }
+        .icon-btn.starred { color: var(--star); }
+        .icon-btn.dismiss-btn:hover { color: var(--danger); }
+
+        .card-body {
+            padding: 1rem 1.15rem;
+        }
+
+        .card-price {
+            font-family: 'DM Serif Display', serif;
+            font-size: 1.35rem;
+            color: var(--accent);
+            margin-bottom: 0.25rem;
+        }
+
+        .card-title {
+            font-size: 0.85rem;
+            font-weight: 500;
+            color: var(--text);
+            line-height: 1.35;
+            display: -webkit-box;
+            -webkit-line-clamp: 2;
+            -webkit-box-orient: vertical;
+            overflow: hidden;
+            margin-bottom: 0.6rem;
+        }
+
+        .card-meta {
+            display: flex;
+            gap: 0.75rem;
+            font-size: 0.75rem;
+            color: var(--text-muted);
+            flex-wrap: wrap;
+        }
+
+        .card-meta-item {
+            display: flex;
+            align-items: center;
+            gap: 0.25rem;
+        }
+
+        .card-location {
+            font-size: 0.78rem;
+            color: var(--text-light);
+            margin-top: 0.5rem;
+            display: flex;
+            align-items: center;
+            gap: 0.3rem;
+        }
+
+        .card-footer {
+            padding: 0.65rem 1.15rem;
+            border-top: 1px solid var(--border);
+            display: flex;
+            align-items: center;
+            justify-content: space-between;
+        }
+
+        .card-footer a {
+            font-size: 0.78rem;
+            color: var(--accent);
+            text-decoration: none;
+            font-weight: 500;
+        }
+        .card-footer a:hover { text-decoration: underline; }
+
+        .card-date {
+            font-size: 0.7rem;
+            color: var(--text-light);
+        }
+
+        .badge {
+            display: inline-block;
+            padding: 0.15rem 0.45rem;
+            border-radius: 3px;
+            font-size: 0.65rem;
+            font-weight: 600;
+            text-transform: uppercase;
+            letter-spacing: 0.04em;
+        }
+
+        .badge-new {
+            background: var(--accent-light);
+            color: var(--accent);
+        }
+
+        /* ── Notes Modal ── */
+        .modal-overlay {
+            display: none;
+            position: fixed;
+            inset: 0;
+            background: rgba(0,0,0,0.4);
+            z-index: 200;
+            align-items: center;
+            justify-content: center;
+            backdrop-filter: blur(2px);
+        }
+
+        .modal-overlay.open { display: flex; }
+
+        .modal {
+            background: var(--bg-card);
+            border-radius: var(--radius);
+            padding: 1.5rem;
+            width: 90%;
+            max-width: 480px;
+            box-shadow: var(--shadow-lg);
+        }
+
+        .modal h3 {
+            font-family: 'DM Serif Display', serif;
+            font-size: 1.1rem;
+            margin-bottom: 0.75rem;
+        }
+
+        .modal textarea {
+            width: 100%;
+            min-height: 120px;
+            padding: 0.75rem;
+            border: 1px solid var(--border);
+            border-radius: var(--radius-sm);
+            font-family: inherit;
+            font-size: 0.85rem;
+            resize: vertical;
+            line-height: 1.5;
+        }
+
+        .modal textarea:focus {
+            outline: none;
+            border-color: var(--accent);
+        }
+
+        .modal-actions {
+            display: flex;
+            gap: 0.5rem;
+            justify-content: flex-end;
+            margin-top: 0.75rem;
+        }
+
+        /* ── Pagination ── */
+        .pagination {
+            display: flex;
+            justify-content: center;
+            gap: 0.5rem;
+            padding: 1.5rem 2rem;
+        }
+
+        .pagination a, .pagination span {
+            padding: 0.4rem 0.85rem;
+            border-radius: var(--radius-sm);
+            font-size: 0.825rem;
+            text-decoration: none;
+        }
+
+        .pagination a {
+            color: var(--text-muted);
+            border: 1px solid var(--border);
+        }
+        .pagination a:hover {
+            border-color: var(--accent);
+            color: var(--accent);
+        }
+
+        .pagination .current {
+            background: var(--accent);
+            color: white;
+            border: 1px solid var(--accent);
+        }
+
+        /* ── Empty State ── */
+        .empty-state {
+            text-align: center;
+            padding: 4rem 2rem;
+        }
+
+        .empty-state .icon { font-size: 3rem; margin-bottom: 1rem; opacity: 0.4; }
+        .empty-state h2 {
+            font-family: 'DM Serif Display', serif;
+            font-size: 1.3rem;
+            margin-bottom: 0.5rem;
+        }
+        .empty-state p { color: var(--text-muted); font-size: 0.9rem; max-width: 400px; margin: 0 auto; }
+
+        /* ── Loading Indicator ── */
+        .checking-indicator {
+            display: none;
+            align-items: center;
+            gap: 0.5rem;
+            color: rgba(255,255,255,0.7);
+            font-size: 0.8rem;
+        }
+
+        .checking-indicator.visible { display: flex; }
+
+        .spinner {
+            width: 14px;
+            height: 14px;
+            border: 2px solid rgba(255,255,255,0.2);
+            border-top-color: white;
+            border-radius: 50%;
+            animation: spin 0.6s linear infinite;
+        }
+
+        @keyframes spin { to { transform: rotate(360deg); } }
+
+        /* ── Responsive ── */
+        @media (max-width: 768px) {
+            .header { padding: 1rem; }
+            .stats-bar { padding: 0.75rem 1rem; }
+            .controls { padding: 0.75rem 1rem; }
+            .property-grid { padding: 0 1rem 1rem; grid-template-columns: 1fr; }
+        }
+
+        /* ── Toast notifications ── */
+        .toast {
+            position: fixed;
+            bottom: 1.5rem;
+            right: 1.5rem;
+            background: var(--bg-dark);
+            color: white;
+            padding: 0.75rem 1.25rem;
+            border-radius: var(--radius-sm);
+            font-size: 0.85rem;
+            box-shadow: var(--shadow-lg);
+            transform: translateY(100px);
+            opacity: 0;
+            transition: all 0.3s ease;
+            z-index: 300;
+        }
+        .toast.show { transform: translateY(0); opacity: 1; }
+    </style>
+</head>
+<body>
+
+<!-- Header -->
+<div class="header">
+    <h1>Property <span>Finder</span></h1>
+    <div class="header-actions">
+        <div class="checking-indicator" id="checkingIndicator">
+            <div class="spinner"></div>
+            <span>Checking emails…</span>
+        </div>
+        <button class="btn btn-primary" onclick="checkNow()">⟳ Check Now</button>
+        <a href="/" class="btn btn-ghost">↻ Refresh</a>
+    </div>
+</div>
+
+<!-- Stats Bar -->
+<div class="stats-bar">
+    <div class="stat">
+        <div class="stat-value">{{ stats.active }}</div>
+        <div class="stat-label">Active</div>
+    </div>
+    <div class="stat">
+        <div class="stat-value">{{ stats.starred }}</div>
+        <div class="stat-label">Starred</div>
+    </div>
+    <div class="stat">
+        <div class="stat-value">{{ stats.total }}</div>
+        <div class="stat-label">Total Found</div>
+    </div>
+    <div class="stat">
+        <div class="stat-value">{{ stats.emails_processed }}</div>
+        <div class="stat-label">Emails Parsed</div>
+    </div>
+    <div class="stat">
+        <div class="stat-value">{% if stats.last_check %}{{ stats.last_check[:16] }}{% else %}Never{% endif %}</div>
+        <div class="stat-label">Last Check</div>
+    </div>
+</div>
+
+<!-- Controls -->
+<div class="controls">
+    <div class="filter-group">
+        <a href="/?sort={{ sort_by }}&dir={{ sort_dir }}" class="btn btn-outline {% if not starred_only and not show_dismissed %}active{% endif %}">All</a>
+        <a href="/?starred=1&sort={{ sort_by }}&dir={{ sort_dir }}" class="btn btn-outline {% if starred_only %}active{% endif %}">⭐ Starred</a>
+        <a href="/?dismissed=1&sort={{ sort_by }}&dir={{ sort_dir }}" class="btn btn-outline {% if show_dismissed %}active{% endif %}">Hidden</a>
+
+        <select class="sort-select" onchange="applySort(this.value)">
+            <option value="first_seen-DESC" {% if sort_by == 'first_seen' and sort_dir == 'DESC' %}selected{% endif %}>Newest First</option>
+            <option value="first_seen-ASC" {% if sort_by == 'first_seen' and sort_dir == 'ASC' %}selected{% endif %}>Oldest First</option>
+            <option value="price-ASC" {% if sort_by == 'price' and sort_dir == 'ASC' %}selected{% endif %}>Price: Low → High</option>
+            <option value="price-DESC" {% if sort_by == 'price' and sort_dir == 'DESC' %}selected{% endif %}>Price: High → Low</option>
+            <option value="acres-DESC" {% if sort_by == 'acres' and sort_dir == 'DESC' %}selected{% endif %}>Most Land</option>
+        </select>
+    </div>
+
+    <div class="result-count">
+        Showing {{ properties|length }} of {{ total }} properties
+        · Filters: ≤£{{ "{:,}".format(filters.max_price) }}, {{ filters.min_bedrooms }}+ beds, {{ filters.min_acres }}+ acres
+    </div>
+</div>
+
+<!-- Property Grid -->
+{% if properties %}
+<div class="property-grid">
+    {% for prop in properties %}
+    <div class="property-card {% if prop.dismissed %}dismissed{% endif %}" id="card-{{ prop.id }}">
+        <div class="card-image">
+            {% if prop.image_url %}
+                <img src="{{ prop.image_url }}" alt="" loading="lazy" onerror="this.style.display='none'">
+            {% else %}
+                <div class="placeholder-icon">🏡</div>
+            {% endif %}
+            <div class="card-source">{{ prop.source }}</div>
+            <div class="card-actions-top">
+                <button class="icon-btn {% if prop.starred %}starred{% endif %}"
+                        onclick="toggleStar({{ prop.id }}, this)" title="Star">★</button>
+                <button class="icon-btn dismiss-btn"
+                        onclick="toggleDismiss({{ prop.id }})" title="Hide">✕</button>
+            </div>
+        </div>
+
+        <div class="card-body">
+            <div class="card-price">
+                {% if prop.price %}£{{ "{:,}".format(prop.price) }}{% else %}Price TBC{% endif %}
+            </div>
+
+            <div class="card-title">{{ prop.title or 'Untitled property' }}</div>
+
+            <div class="card-meta">
+                {% if prop.bedrooms %}
+                <span class="card-meta-item">🛏 {{ prop.bedrooms }} bed{{ 's' if prop.bedrooms != 1 }}</span>
+                {% endif %}
+                {% if prop.acres %}
+                <span class="card-meta-item">🌾 {{ prop.acres }} acres</span>
+                {% endif %}
+                {% if prop.county %}
+                <span class="card-meta-item">📍 {{ prop.county|capitalize }}</span>
+                {% endif %}
+            </div>
+
+            {% if prop.location %}
+            <div class="card-location">{{ prop.location }}</div>
+            {% endif %}
+        </div>
+
+        <div class="card-footer">
+            {% if prop.url %}
+            <a href="{{ prop.url }}" target="_blank" rel="noopener">View Listing →</a>
+            {% else %}
+            <span></span>
+            {% endif %}
+            <div style="display: flex; align-items: center; gap: 0.5rem;">
+                <button class="btn btn-outline" style="padding: 0.25rem 0.5rem; font-size: 0.7rem;"
+                        onclick="openNotes({{ prop.id }}, '{{ prop.notes|replace("'", "\\'") }}')">📝</button>
+                <span class="card-date">{{ prop.first_seen[:10] if prop.first_seen else '' }}</span>
+            </div>
+        </div>
+    </div>
+    {% endfor %}
+</div>
+{% else %}
+<div class="empty-state">
+    <div class="icon">🏡</div>
+    <h2>No properties yet</h2>
+    <p>Set up your saved search alerts on Rightmove, Zoopla, and OnTheMarket, pointing to your dedicated Gmail address. Properties will appear here as alert emails arrive.</p>
+</div>
+{% endif %}
+
+<!-- Pagination -->
+{% if total_pages > 1 %}
+<div class="pagination">
+    {% if page > 1 %}
+    <a href="?page={{ page - 1 }}&sort={{ sort_by }}&dir={{ sort_dir }}&dismissed={{ '1' if show_dismissed else '0' }}&starred={{ '1' if starred_only else '0' }}">← Prev</a>
+    {% endif %}
+
+    {% for p in range(1, total_pages + 1) %}
+        {% if p == page %}
+        <span class="current">{{ p }}</span>
+        {% elif p <= 3 or p > total_pages - 2 or (p >= page - 1 and p <= page + 1) %}
+        <a href="?page={{ p }}&sort={{ sort_by }}&dir={{ sort_dir }}&dismissed={{ '1' if show_dismissed else '0' }}&starred={{ '1' if starred_only else '0' }}">{{ p }}</a>
+        {% elif p == 4 or p == total_pages - 2 %}
+        <span>…</span>
+        {% endif %}
+    {% endfor %}
+
+    {% if page < total_pages %}
+    <a href="?page={{ page + 1 }}&sort={{ sort_by }}&dir={{ sort_dir }}&dismissed={{ '1' if show_dismissed else '0' }}&starred={{ '1' if starred_only else '0' }}">Next →</a>
+    {% endif %}
+</div>
+{% endif %}
+
+<!-- Notes Modal -->
+<div class="modal-overlay" id="notesModal">
+    <div class="modal">
+        <h3>Notes</h3>
+        <textarea id="notesText" placeholder="Add your notes about this property…"></textarea>
+        <div class="modal-actions">
+            <button class="btn btn-outline" onclick="closeNotes()">Cancel</button>
+            <button class="btn btn-primary" onclick="saveNotes()">Save</button>
+        </div>
+    </div>
+</div>
+
+<!-- Toast -->
+<div class="toast" id="toast"></div>
+
+<script>
+    let currentNotesId = null;
+
+    function applySort(val) {
+        const [sort, dir] = val.split('-');
+        const url = new URL(window.location);
+        url.searchParams.set('sort', sort);
+        url.searchParams.set('dir', dir);
+        url.searchParams.set('page', '1');
+        window.location = url;
+    }
+
+    async function toggleStar(id, btn) {
+        const res = await fetch(`/api/toggle/${id}/starred`, { method: 'POST' });
+        if (res.ok) {
+            btn.classList.toggle('starred');
+            showToast('Updated');
+        }
+    }
+
+    async function toggleDismiss(id) {
+        const res = await fetch(`/api/toggle/${id}/dismissed`, { method: 'POST' });
+        if (res.ok) {
+            const card = document.getElementById(`card-${id}`);
+            if (card) {
+                card.style.transition = 'opacity 0.3s, transform 0.3s';
+                card.style.opacity = '0';
+                card.style.transform = 'scale(0.95)';
+                setTimeout(() => card.remove(), 300);
+            }
+            showToast('Property hidden');
+        }
+    }
+
+    function openNotes(id, existingNotes) {
+        currentNotesId = id;
+        document.getElementById('notesText').value = existingNotes || '';
+        document.getElementById('notesModal').classList.add('open');
+        document.getElementById('notesText').focus();
+    }
+
+    function closeNotes() {
+        document.getElementById('notesModal').classList.remove('open');
+        currentNotesId = null;
+    }
+
+    async function saveNotes() {
+        if (!currentNotesId) return;
+        const notes = document.getElementById('notesText').value;
+        const res = await fetch(`/api/notes/${currentNotesId}`, {
+            method: 'POST',
+            headers: { 'Content-Type': 'application/json' },
+            body: JSON.stringify({ notes })
+        });
+        if (res.ok) {
+            closeNotes();
+            showToast('Notes saved');
+        }
+    }
+
+    async function checkNow() {
+        const indicator = document.getElementById('checkingIndicator');
+        indicator.classList.add('visible');
+        try {
+            const res = await fetch('/api/check-now', { method: 'POST' });
+            const data = await res.json();
+            indicator.classList.remove('visible');
+            if (data.new_listings > 0) {
+                showToast(`Found ${data.new_listings} new listing${data.new_listings > 1 ? 's' : ''}!`);
+                setTimeout(() => window.location.reload(), 1500);
+            } else if (data.errors && data.errors.length > 0) {
+                showToast(`Error: ${data.errors[0]}`);
+            } else {
+                showToast(`Checked ${data.emails_checked} emails — no new listings`);
+            }
+        } catch (e) {
+            indicator.classList.remove('visible');
+            showToast('Check failed — see logs');
+        }
+    }
+
+    function showToast(msg) {
+        const toast = document.getElementById('toast');
+        toast.textContent = msg;
+        toast.classList.add('show');
+        setTimeout(() => toast.classList.remove('show'), 3000);
+    }
+
+    // Close modal on overlay click
+    document.getElementById('notesModal').addEventListener('click', function(e) {
+        if (e.target === this) closeNotes();
+    });
+
+    // Escape key closes modal
+    document.addEventListener('keydown', function(e) {
+        if (e.key === 'Escape') closeNotes();
+    });
+</script>
+</body>
+</html>
