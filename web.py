@@ -1,6 +1,6 @@
 """Flask web dashboard for Property Finder."""
 import logging
-from flask import Flask, render_template, request, jsonify, redirect, url_for
+from flask import Flask, render_template, request, jsonify, redirect, url_for, Response
 
 import config
 import database
@@ -66,6 +66,39 @@ def check_now():
     """Trigger an immediate email check."""
     stats = check_emails()
     return jsonify(stats)
+
+
+@app.route("/emails")
+def emails():
+    page = max(1, int(request.args.get("page", "1")))
+    per_page = 50
+    email_list = database.get_emails(limit=per_page, offset=(page - 1) * per_page)
+    total = database.get_email_count()
+    return render_template(
+        "emails.html",
+        emails=email_list,
+        page=page,
+        per_page=per_page,
+        total=total,
+        total_pages=(total + per_page - 1) // per_page,
+    )
+
+
+@app.route("/emails/<int:email_id>")
+def email_detail(email_id):
+    body_html = database.get_email_body(email_id)
+    if body_html is None:
+        return "Email not found", 404
+    return render_template("email_detail.html", email_id=email_id, body_html=body_html)
+
+
+@app.route("/emails/<int:email_id>/raw")
+def email_raw(email_id):
+    """Serve the raw email HTML in an iframe-friendly way."""
+    body_html = database.get_email_body(email_id)
+    if body_html is None:
+        return "Email not found", 404
+    return Response(body_html, mimetype="text/html")
 
 
 @app.route("/api/stats")

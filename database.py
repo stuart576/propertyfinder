@@ -46,7 +46,8 @@ def init_db():
             subject TEXT,
             received_at TIMESTAMP,
             processed_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
-            listings_found INTEGER DEFAULT 0
+            listings_found INTEGER DEFAULT 0,
+            body_html TEXT DEFAULT ''
         );
 
         CREATE INDEX IF NOT EXISTS idx_properties_price ON properties(price);
@@ -55,6 +56,13 @@ def init_db():
         CREATE INDEX IF NOT EXISTS idx_properties_first_seen ON properties(first_seen);
     """)
     conn.commit()
+
+    # Migrate: add body_html column if missing (existing databases)
+    cols = [row[1] for row in conn.execute("PRAGMA table_info(email_log)").fetchall()]
+    if "body_html" not in cols:
+        conn.execute("ALTER TABLE email_log ADD COLUMN body_html TEXT DEFAULT ''")
+        conn.commit()
+
     conn.close()
 
 
@@ -117,13 +125,13 @@ def upsert_property(data: dict) -> tuple[bool, int]:
     return True, pid
 
 
-def log_email(uid: str, sender: str, subject: str, received_at: str, listings_found: int):
+def log_email(uid: str, sender: str, subject: str, received_at: str, listings_found: int, body_html: str = ""):
     conn = get_connection()
     try:
         conn.execute(
-            """INSERT OR IGNORE INTO email_log (email_uid, sender, subject, received_at, listings_found)
-               VALUES (?, ?, ?, ?, ?)""",
-            (uid, sender, subject, received_at, listings_found),
+            """INSERT OR IGNORE INTO email_log (email_uid, sender, subject, received_at, listings_found, body_html)
+               VALUES (?, ?, ?, ?, ?, ?)""",
+            (uid, sender, subject, received_at, listings_found, body_html),
         )
         conn.commit()
     finally:
@@ -208,6 +216,33 @@ def toggle_property(property_id: int, field: str) -> bool:
     conn.commit()
     conn.close()
     return True
+
+
+def get_emails(limit: int = 50, offset: int = 0) -> list[dict]:
+    conn = get_connection()
+    rows = conn.execute(
+        """SELECT id, email_uid, sender, subject, received_at, processed_at, listings_found
+           FROM email_log ORDER BY processed_at DESC LIMIT ? OFFSET ?""",
+        (limit, offset),
+    ).fetchall()
+    conn.close()
+    return [dict(r) for r in rows]
+
+
+def get_email_count() -> int:
+    conn = get_connection()
+    row = conn.execute("SELECT COUNT(*) as cnt FROM email_log").fetchone()
+    conn.close()
+    return row["cnt"]
+
+
+def get_email_body(email_id: int) -> Optional[str]:
+    conn = get_connection()
+    row = conn.execute("SELECT body_html FROM email_log WHERE id = ?", (email_id,)).fetchone()
+    conn.close()
+    if row:
+        return row["body_html"]
+    return None
 
 
 def update_notes(property_id: int, notes: str):

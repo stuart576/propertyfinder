@@ -203,6 +203,7 @@ def check_emails() -> dict:
                 subject=subject,
                 received_at=received,
                 listings_found=len(listings),
+                body_html=html_body,
             )
 
             logger.info(f"  → Found {len(listings)} listings ({new_count} new)")

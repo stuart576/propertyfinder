@@ -1,0 +1,117 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Email — Property Finder</title>
+    <link rel="preconnect" href="https://fonts.googleapis.com">
+    <link href="https://fonts.googleapis.com/css2?family=DM+Sans:wght@400;500;600;700&family=DM+Serif+Display&display=swap" rel="stylesheet">
+    <style>
+        :root {
+            --bg: #f5f2ed;
+            --bg-card: #ffffff;
+            --bg-dark: #2c2c2c;
+            --text: #2c2c2c;
+            --text-muted: #7a7568;
+            --accent: #4a7c59;
+            --border: #e2ddd5;
+            --radius: 10px;
+            --radius-sm: 6px;
+            --shadow-sm: 0 1px 2px rgba(0,0,0,0.06);
+        }
+
+        * { margin: 0; padding: 0; box-sizing: border-box; }
+
+        body {
+            font-family: 'DM Sans', sans-serif;
+            background: var(--bg);
+            color: var(--text);
+            line-height: 1.5;
+            min-height: 100vh;
+            display: flex;
+            flex-direction: column;
+        }
+
+        .header {
+            background: var(--bg-dark);
+            color: white;
+            padding: 1.25rem 2rem;
+            display: flex;
+            align-items: center;
+            justify-content: space-between;
+            position: sticky;
+            top: 0;
+            z-index: 100;
+        }
+
+        .header h1 {
+            font-family: 'DM Serif Display', serif;
+            font-size: 1.5rem;
+            font-weight: 400;
+        }
+
+        .header h1 span { color: var(--accent); }
+
+        .header-actions { display: flex; gap: 0.75rem; align-items: center; }
+
+        .btn {
+            display: inline-flex;
+            align-items: center;
+            gap: 0.4rem;
+            padding: 0.5rem 1rem;
+            border: none;
+            border-radius: var(--radius-sm);
+            font-family: inherit;
+            font-size: 0.825rem;
+            font-weight: 500;
+            cursor: pointer;
+            transition: all 0.15s ease;
+            text-decoration: none;
+        }
+
+        .btn-ghost {
+            background: rgba(255,255,255,0.1);
+            color: rgba(255,255,255,0.8);
+            border: 1px solid rgba(255,255,255,0.15);
+        }
+        .btn-ghost:hover { background: rgba(255,255,255,0.18); color: white; }
+
+        .email-frame-wrapper {
+            flex: 1;
+            padding: 1.5rem 2rem;
+            display: flex;
+            flex-direction: column;
+        }
+
+        .email-frame {
+            flex: 1;
+            width: 100%;
+            min-height: 600px;
+            border: 1px solid var(--border);
+            border-radius: var(--radius);
+            background: var(--bg-card);
+            box-shadow: var(--shadow-sm);
+        }
+
+        @media (max-width: 768px) {
+            .header { padding: 1rem; }
+            .email-frame-wrapper { padding: 1rem; }
+        }
+    </style>
+</head>
+<body>
+
+<div class="header">
+    <h1>Property <span>Finder</span> — Email</h1>
+    <div class="header-actions">
+        <a href="/emails" class="btn btn-ghost">← Back to Emails</a>
+        <a href="/" class="btn btn-ghost">Properties</a>
+    </div>
+</div>
+
+<div class="email-frame-wrapper">
+    <iframe class="email-frame" src="/emails/{{ email_id }}/raw" sandbox="allow-same-origin"></iframe>
+</div>
+
+</body>
+</html>
