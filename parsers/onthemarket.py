@@ -31,8 +31,20 @@ class OnTheMarketParser(BaseParser):
 
             full_text = container.get_text(separator=" ", strip=True) if container else ""
 
-            img = container.find("img") if container else None
-            image_url = img.get("src", "") or img.get("data-src", "") if img else ""
+            # Extract image — prefer property images
+            image_url = ""
+            if container:
+                # Try: img with "properties" in src/data-src
+                for img in container.find_all("img"):
+                    src = img.get("src", "") or img.get("data-src", "")
+                    if "properties" in src.lower():
+                        image_url = src
+                        break
+                # Fallback: any img
+                if not image_url:
+                    img = container.find("img")
+                    if img:
+                        image_url = img.get("src", "") or img.get("data-src", "")
 
             price = self.extract_price(full_text)
             bedrooms = self.extract_bedrooms(full_text)

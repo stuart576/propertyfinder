@@ -39,11 +39,25 @@ class RightmoveParser(BaseParser):
 
             full_text = container.get_text(separator=" ", strip=True) if container else ""
 
-            # Extract image
-            img = container.find("img") if container else None
+            # Extract image — prefer property photos over icons/logos
             image_url = ""
-            if img:
-                image_url = img.get("src", "") or img.get("data-src", "")
+            if container:
+                # Try: img with "property-photo" in src/data-src
+                for img in container.find_all("img"):
+                    src = img.get("src", "") or img.get("data-src", "")
+                    if "property-photo" in src.lower():
+                        image_url = src
+                        break
+                # Fallback: img with alt="image" (Rightmove convention)
+                if not image_url:
+                    img = container.find("img", alt=re.compile(r"^image$", re.IGNORECASE))
+                    if img:
+                        image_url = img.get("src", "") or img.get("data-src", "")
+                # Fallback: any img
+                if not image_url:
+                    img = container.find("img")
+                    if img:
+                        image_url = img.get("src", "") or img.get("data-src", "")
 
             price = self.extract_price(full_text)
             bedrooms = self.extract_bedrooms(full_text)
