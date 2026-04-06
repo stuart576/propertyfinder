@@ -350,6 +350,40 @@
             color: var(--accent);
         }
 
+        .match-tags {
+            display: flex;
+            flex-wrap: wrap;
+            gap: 0.3rem;
+            margin-top: 0.5rem;
+        }
+
+        .match-tag {
+            display: inline-flex;
+            align-items: center;
+            gap: 0.2rem;
+            padding: 0.15rem 0.4rem;
+            border-radius: 3px;
+            font-size: 0.65rem;
+            font-weight: 500;
+            letter-spacing: 0.02em;
+        }
+
+        .match-tag.matched {
+            background: var(--accent-light);
+            color: var(--accent);
+        }
+
+        .match-tag.unmatched {
+            background: #f5f0eb;
+            color: var(--text-light);
+        }
+
+        .match-tag.missing {
+            background: #f9f6f2;
+            color: var(--text-light);
+            font-style: italic;
+        }
+
         /* ── Notes Modal ── */
         .modal-overlay {
             display: none;
@@ -564,7 +598,7 @@
     {% for prop in properties %}
     <div class="property-card {% if prop.dismissed %}dismissed{% endif %}" id="card-{{ prop.id }}">
         <div class="card-image">
-            {% if prop.image_url %}
+            {% if prop.image_url and prop.image_url != 'none' %}
                 <img src="{{ prop.image_url }}" alt="" loading="lazy" onerror="this.style.display='none'">
             {% else %}
                 <div class="placeholder-icon">🏡</div>
@@ -600,6 +634,46 @@
             {% if prop.location %}
             <div class="card-location">{{ prop.location }}</div>
             {% endif %}
+
+            <div class="match-tags">
+                {% if prop.price %}
+                    {% if prop.price <= filters.max_price %}
+                        <span class="match-tag matched" title="Within budget (max £{{ '{:,}'.format(filters.max_price) }})">£{{ '{:,}'.format(prop.price) }}</span>
+                    {% else %}
+                        <span class="match-tag unmatched" title="Over budget">£{{ '{:,}'.format(prop.price) }}</span>
+                    {% endif %}
+                {% else %}
+                    <span class="match-tag missing" title="No price found">Price unknown</span>
+                {% endif %}
+
+                {% if prop.bedrooms %}
+                    {% if prop.bedrooms >= filters.min_bedrooms %}
+                        <span class="match-tag matched" title="Meets minimum ({{ filters.min_bedrooms }}+ beds)">{{ prop.bedrooms }} bed{{ 's' if prop.bedrooms != 1 }}</span>
+                    {% else %}
+                        <span class="match-tag unmatched" title="Below minimum beds">{{ prop.bedrooms }} bed{{ 's' if prop.bedrooms != 1 }}</span>
+                    {% endif %}
+                {% else %}
+                    <span class="match-tag missing" title="No bedroom info">Beds unknown</span>
+                {% endif %}
+
+                {% if prop.acres %}
+                    {% if prop.acres >= filters.min_acres %}
+                        <span class="match-tag matched" title="Meets minimum ({{ filters.min_acres }}+ acres)">{{ prop.acres }} acres</span>
+                    {% else %}
+                        <span class="match-tag unmatched" title="Below minimum acres">{{ prop.acres }} acres</span>
+                    {% endif %}
+                {% else %}
+                    <span class="match-tag missing" title="No acreage info">Acres unknown</span>
+                {% endif %}
+
+                {% if prop.county %}
+                    {% if prop.county.lower() in filters.counties %}
+                        <span class="match-tag matched" title="Target county">{{ prop.county|capitalize }}</span>
+                    {% else %}
+                        <span class="match-tag unmatched">{{ prop.county|capitalize }}</span>
+                    {% endif %}
+                {% endif %}
+            </div>
         </div>
 
         <div class="card-footer">

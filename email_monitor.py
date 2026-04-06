@@ -13,6 +13,7 @@ from urllib.error import HTTPError
 import config
 import database
 from parsers import get_parser_for_sender
+from image_scraper import fetch_og_image
 
 logger = logging.getLogger("property-finder.email")
 
@@ -199,9 +200,11 @@ def check_emails() -> dict:
                 listings = []
                 stats["errors"].append(f"Parser error ({source_name}): {str(e)}")
 
-            # Store listings
+            # Store listings, fetching images for any that don't have one
             new_count = 0
             for listing in listings:
+                if not listing.get("image_url") and listing.get("url"):
+                    listing["image_url"] = fetch_og_image(listing["url"])
                 is_new, _ = database.upsert_property(listing)
                 if is_new:
                     new_count += 1
@@ -237,12 +240,29 @@ def check_emails() -> dict:
     return stats
 
 
+def backfill_images():
+    """Fetch images for properties that are missing them."""
+    missing = database.get_properties_missing_images(limit=20)
+    if not missing:
+        return
+    logger.info(f"Backfilling images for {len(missing)} properties...")
+    for prop in missing:
+        img = fetch_og_image(prop["url"])
+        if img:
+            database.update_image_url(prop["id"], img)
+            logger.info(f"  Fetched image for property {prop['id']}")
+        else:
+            # Mark as attempted so we don't retry endlessly
+            database.update_image_url(prop["id"], "none")
+
+
 def run_monitor_loop():
     """Run the email monitor in a loop."""
     logger.info(f"Starting email monitor (interval: {config.CHECK_INTERVAL}s)")
     while True:
         try:
             check_emails()
+            backfill_images()
         except Exception as e:
             logger.error(f"Monitor loop error: {e}")
         time.sleep(config.CHECK_INTERVAL)

@@ -245,6 +245,27 @@ def get_email_body(email_id: int) -> Optional[str]:
     return None
 
 
+def get_properties_missing_images(limit: int = 20) -> list[dict]:
+    """Get properties that have a URL but no image."""
+    conn = get_connection()
+    rows = conn.execute(
+        """SELECT id, url FROM properties
+           WHERE url != '' AND (image_url IS NULL OR image_url = '')
+           AND dismissed = 0
+           ORDER BY first_seen DESC LIMIT ?""",
+        (limit,),
+    ).fetchall()
+    conn.close()
+    return [dict(r) for r in rows]
+
+
+def update_image_url(property_id: int, image_url: str):
+    conn = get_connection()
+    conn.execute("UPDATE properties SET image_url = ? WHERE id = ?", (image_url, property_id))
+    conn.commit()
+    conn.close()
+
+
 def update_notes(property_id: int, notes: str):
     conn = get_connection()
     conn.execute("UPDATE properties SET notes = ? WHERE id = ?", (notes, property_id))
