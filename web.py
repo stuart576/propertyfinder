@@ -101,6 +101,15 @@ def email_raw(email_id):
     return Response(body_html, mimetype="text/html")
 
 
+@app.route("/api/reprocess", methods=["POST"])
+def reprocess():
+    """Clear email log and reset images, then re-check all emails."""
+    database.clear_email_log()
+    database.reset_images()
+    stats = check_emails()
+    return jsonify(stats)
+
+
 @app.route("/api/stats")
 def api_stats():
     return jsonify(database.get_stats())

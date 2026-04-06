@@ -92,10 +92,21 @@ def upsert_property(data: dict) -> tuple[bool, int]:
     ).fetchone()
 
     if existing:
-        cursor.execute(
-            "UPDATE properties SET last_seen = ? WHERE fingerprint = ?",
-            (datetime.utcnow().isoformat(), fp),
-        )
+        # Update last_seen, and refresh image if we now have a better one
+        new_image = data.get("image_url", "")
+        if new_image and new_image != "none":
+            cursor.execute(
+                """UPDATE properties SET last_seen = ?,
+                   image_url = CASE WHEN image_url IN ('', 'none') OR image_url IS NULL
+                                    THEN ? ELSE image_url END
+                   WHERE fingerprint = ?""",
+                (datetime.utcnow().isoformat(), new_image, fp),
+            )
+        else:
+            cursor.execute(
+                "UPDATE properties SET last_seen = ? WHERE fingerprint = ?",
+                (datetime.utcnow().isoformat(), fp),
+            )
         conn.commit()
         pid = existing["id"]
         conn.close()
@@ -262,6 +273,22 @@ def get_properties_missing_images(limit: int = 20) -> list[dict]:
 def update_image_url(property_id: int, image_url: str):
     conn = get_connection()
     conn.execute("UPDATE properties SET image_url = ? WHERE id = ?", (image_url, property_id))
+    conn.commit()
+    conn.close()
+
+
+def clear_email_log():
+    """Delete all email log entries so emails get reprocessed on next check."""
+    conn = get_connection()
+    conn.execute("DELETE FROM email_log")
+    conn.commit()
+    conn.close()
+
+
+def reset_images():
+    """Clear all property images so they get re-fetched."""
+    conn = get_connection()
+    conn.execute("UPDATE properties SET image_url = '' WHERE dismissed = 0")
     conn.commit()
     conn.close()
 

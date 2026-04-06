@@ -541,6 +541,7 @@
             <span>Checking emails…</span>
         </div>
         <button class="btn btn-primary" onclick="checkNow()">⟳ Check Now</button>
+        <button class="btn btn-ghost" onclick="reprocess()" title="Re-parse all emails and refresh images">🔄 Reprocess</button>
         <a href="/emails" class="btn btn-ghost">📧 Emails</a>
         <a href="/" class="btn btn-ghost">↻ Refresh</a>
     </div>
@@ -815,6 +816,25 @@
         } catch (e) {
             indicator.classList.remove('visible');
             showToast('Check failed — see logs');
+        }
+    }
+
+    async function reprocess() {
+        if (!confirm('Re-parse all emails and refresh images? This may take a while.')) return;
+        const indicator = document.getElementById('checkingIndicator');
+        indicator.querySelector('span').textContent = 'Reprocessing all emails…';
+        indicator.classList.add('visible');
+        try {
+            const res = await fetch('/api/reprocess', { method: 'POST' });
+            const data = await res.json();
+            indicator.classList.remove('visible');
+            indicator.querySelector('span').textContent = 'Checking emails…';
+            showToast(`Reprocessed ${data.emails_checked} emails, ${data.new_listings} new listings`);
+            setTimeout(() => window.location.reload(), 1500);
+        } catch (e) {
+            indicator.classList.remove('visible');
+            indicator.querySelector('span').textContent = 'Checking emails…';
+            showToast('Reprocess failed — see logs');
         }
     }
 
