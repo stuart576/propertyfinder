@@ -1,4 +1,5 @@
 """Microsoft Graph API email monitor for property alert emails."""
+import hashlib
 import logging
 import time
 import json
@@ -141,18 +142,30 @@ def check_emails() -> dict:
 
     try:
         logger.info(f"Fetching messages from {config.GRAPH_MAILBOX}...")
-        messages = get_messages(top=50)
-        logger.info(f"Retrieved {len(messages)} messages")
+        all_messages = []
+        skip = 0
+        batch_size = 50
+        while True:
+            batch = get_messages(top=batch_size, skip=skip)
+            logger.info(f"Retrieved {len(batch)} messages (offset {skip})")
+            if not batch:
+                break
+            all_messages.extend(batch)
+            if len(batch) < batch_size:
+                break
+            skip += batch_size
+        logger.info(f"Total messages retrieved: {len(all_messages)}")
 
-        for msg in messages:
+        for msg in all_messages:
             msg_id = msg.get("id", "")
             subject = msg.get("subject", "")
             sender = extract_sender_email(msg)
             received = msg.get("receivedDateTime", "")
 
-            # Use Graph message ID as our unique identifier
-            # These are stable and unique per message
-            uid = msg_id[:64]  # Truncate — Graph IDs are very long
+            # Use a hash of the Graph message ID as our unique identifier
+            # Graph IDs are very long and share common prefixes, so
+            # truncation causes collisions — hashing avoids that
+            uid = hashlib.sha256(msg_id.encode()).hexdigest()[:32]
 
             # Skip already processed
             if database.is_email_processed(uid):
