@@ -20,6 +20,19 @@ def index():
     page = max(1, int(request.args.get("page", "1")))
     per_page = 24
 
+    # User filters
+    min_beds = _int_or_none(request.args.get("min_beds"))
+    max_beds = _int_or_none(request.args.get("max_beds"))
+    min_price = _int_or_none(request.args.get("min_price"))
+    max_price = _int_or_none(request.args.get("max_price"))
+    keyword = request.args.get("q", "").strip()
+
+    filter_kwargs = dict(
+        min_beds=min_beds, max_beds=max_beds,
+        min_price=min_price, max_price=max_price,
+        keyword=keyword,
+    )
+
     properties = database.get_properties(
         show_dismissed=show_dismissed,
         starred_only=starred_only,
@@ -27,8 +40,13 @@ def index():
         sort_dir=sort_dir,
         limit=per_page,
         offset=(page - 1) * per_page,
+        **filter_kwargs,
     )
-    total = database.get_property_count(show_dismissed=show_dismissed)
+    total = database.get_property_count(
+        show_dismissed=show_dismissed,
+        starred_only=starred_only,
+        **filter_kwargs,
+    )
     stats = database.get_stats()
 
     return render_template(
@@ -44,7 +62,23 @@ def index():
         per_page=per_page,
         total=total,
         total_pages=(total + per_page - 1) // per_page,
+        # Active filters for the form
+        f_min_beds=min_beds,
+        f_max_beds=max_beds,
+        f_min_price=min_price,
+        f_max_price=max_price,
+        f_keyword=keyword,
     )
+
+
+def _int_or_none(val):
+    """Parse an int from a query param, returning None if empty/invalid."""
+    if not val:
+        return None
+    try:
+        return int(val)
+    except (ValueError, TypeError):
+        return None
 
 
 @app.route("/api/toggle/<int:property_id>/<field>", methods=["POST"])

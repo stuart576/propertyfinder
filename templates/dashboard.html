@@ -162,7 +162,7 @@
             flex-wrap: wrap;
         }
 
-        select.sort-select {
+        select.sort-select, .filter-input {
             padding: 0.45rem 0.75rem;
             border: 1px solid var(--border);
             border-radius: var(--radius-sm);
@@ -171,6 +171,73 @@
             background: var(--bg-card);
             color: var(--text);
             cursor: pointer;
+        }
+
+        .filter-input {
+            cursor: text;
+            width: 100px;
+        }
+
+        .filter-input.search-input {
+            width: 180px;
+        }
+
+        .filter-input::placeholder {
+            color: var(--text-light);
+        }
+
+        .filter-bar {
+            display: flex;
+            gap: 0.5rem;
+            align-items: center;
+            flex-wrap: wrap;
+            padding: 0.75rem 2rem;
+            background: var(--bg-card);
+            border-bottom: 1px solid var(--border);
+        }
+
+        .filter-label {
+            font-size: 0.7rem;
+            text-transform: uppercase;
+            letter-spacing: 0.06em;
+            color: var(--text-light);
+            font-weight: 500;
+        }
+
+        .filter-sep {
+            width: 1px;
+            height: 24px;
+            background: var(--border);
+            margin: 0 0.25rem;
+        }
+
+        .active-filters {
+            display: flex;
+            gap: 0.35rem;
+            flex-wrap: wrap;
+        }
+
+        .active-filter-tag {
+            display: inline-flex;
+            align-items: center;
+            gap: 0.25rem;
+            padding: 0.2rem 0.5rem;
+            background: var(--accent-light);
+            color: var(--accent);
+            border-radius: 3px;
+            font-size: 0.7rem;
+            font-weight: 500;
+        }
+
+        .active-filter-tag a {
+            color: var(--accent);
+            text-decoration: none;
+            font-weight: 700;
+            line-height: 1;
+        }
+
+        .active-filter-tag a:hover {
+            color: var(--danger);
         }
 
         .result-count {
@@ -507,6 +574,10 @@
         @media (max-width: 768px) {
             .header { padding: 1rem; }
             .stats-bar { padding: 0.75rem 1rem; }
+            .filter-bar { padding: 0.75rem 1rem; }
+            .filter-input { width: 80px; }
+            .filter-input.search-input { width: 140px; }
+            .filter-sep { display: none; }
             .controls { padding: 0.75rem 1rem; }
             .property-grid { padding: 0 1rem 1rem; grid-template-columns: 1fr; }
         }
@@ -571,6 +642,63 @@
     </div>
 </div>
 
+<!-- Filter Bar -->
+<form class="filter-bar" id="filterForm" method="GET" action="/">
+    <input type="hidden" name="sort" value="{{ sort_by }}">
+    <input type="hidden" name="dir" value="{{ sort_dir }}">
+    {% if show_dismissed %}<input type="hidden" name="dismissed" value="1">{% endif %}
+    {% if starred_only %}<input type="hidden" name="starred" value="1">{% endif %}
+
+    <span class="filter-label">Search</span>
+    <input type="text" name="q" class="filter-input search-input" placeholder="Keyword…"
+           value="{{ f_keyword or '' }}">
+
+    <div class="filter-sep"></div>
+    <span class="filter-label">Price</span>
+    <input type="number" name="min_price" class="filter-input" placeholder="Min £"
+           value="{{ f_min_price or '' }}" step="10000">
+    <span style="color: var(--text-light); font-size: 0.8rem;">–</span>
+    <input type="number" name="max_price" class="filter-input" placeholder="Max £"
+           value="{{ f_max_price or '' }}" step="10000">
+
+    <div class="filter-sep"></div>
+    <span class="filter-label">Beds</span>
+    <input type="number" name="min_beds" class="filter-input" placeholder="Min"
+           value="{{ f_min_beds or '' }}" min="0" max="20" style="width:65px">
+    <span style="color: var(--text-light); font-size: 0.8rem;">–</span>
+    <input type="number" name="max_beds" class="filter-input" placeholder="Max"
+           value="{{ f_max_beds or '' }}" min="0" max="20" style="width:65px">
+
+    <button type="submit" class="btn btn-primary" style="padding: 0.45rem 1rem;">Filter</button>
+    {% if f_keyword or f_min_beds is not none or f_max_beds is not none or f_min_price is not none or f_max_price is not none %}
+    <a href="/?sort={{ sort_by }}&dir={{ sort_dir }}{% if show_dismissed %}&dismissed=1{% endif %}{% if starred_only %}&starred=1{% endif %}"
+       class="btn btn-outline" style="padding: 0.45rem 0.75rem;">Clear</a>
+    {% endif %}
+</form>
+
+{% if f_keyword or f_min_beds is not none or f_max_beds is not none or f_min_price is not none or f_max_price is not none %}
+<div style="padding: 0.5rem 2rem; display: flex; align-items: center; gap: 0.5rem; flex-wrap: wrap;">
+    <span class="filter-label">Active:</span>
+    <div class="active-filters">
+        {% if f_keyword %}
+        <span class="active-filter-tag">"{{ f_keyword }}"</span>
+        {% endif %}
+        {% if f_min_price is not none %}
+        <span class="active-filter-tag">Min £{{ "{:,}".format(f_min_price) }}</span>
+        {% endif %}
+        {% if f_max_price is not none %}
+        <span class="active-filter-tag">Max £{{ "{:,}".format(f_max_price) }}</span>
+        {% endif %}
+        {% if f_min_beds is not none %}
+        <span class="active-filter-tag">{{ f_min_beds }}+ beds</span>
+        {% endif %}
+        {% if f_max_beds is not none %}
+        <span class="active-filter-tag">≤{{ f_max_beds }} beds</span>
+        {% endif %}
+    </div>
+</div>
+{% endif %}
+
 <!-- Controls -->
 <div class="controls">
     <div class="filter-group">
@@ -589,7 +717,6 @@
 
     <div class="result-count">
         Showing {{ properties|length }} of {{ total }} properties
-        · Filters: ≤£{{ "{:,}".format(filters.max_price) }}, {{ filters.min_bedrooms }}+ beds, {{ filters.min_acres }}+ acres
     </div>
 </div>
 
@@ -746,7 +873,7 @@
         const url = new URL(window.location);
         url.searchParams.set('sort', sort);
         url.searchParams.set('dir', dir);
-        url.searchParams.set('page', '1');
+        url.searchParams.delete('page');
         window.location = url;
     }
 

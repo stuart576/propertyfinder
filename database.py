@@ -156,6 +156,43 @@ def is_email_processed(uid: str) -> bool:
     return row is not None
 
 
+def _build_filter_clauses(
+    show_dismissed: bool = False,
+    starred_only: bool = False,
+    min_beds: Optional[int] = None,
+    max_beds: Optional[int] = None,
+    min_price: Optional[int] = None,
+    max_price: Optional[int] = None,
+    keyword: str = "",
+) -> tuple[str, list]:
+    """Build WHERE clause and params from filter arguments."""
+    conditions = []
+    params = []
+    if not show_dismissed:
+        conditions.append("dismissed = 0")
+    if starred_only:
+        conditions.append("starred = 1")
+    if min_beds is not None:
+        conditions.append("bedrooms >= ?")
+        params.append(min_beds)
+    if max_beds is not None:
+        conditions.append("bedrooms <= ?")
+        params.append(max_beds)
+    if min_price is not None:
+        conditions.append("price >= ?")
+        params.append(min_price)
+    if max_price is not None:
+        conditions.append("price <= ?")
+        params.append(max_price)
+    if keyword:
+        conditions.append("(title LIKE ? OR location LIKE ? OR description LIKE ? OR county LIKE ?)")
+        like = f"%{keyword}%"
+        params.extend([like, like, like, like])
+
+    where = f"WHERE {' AND '.join(conditions)}" if conditions else ""
+    return where, params
+
+
 def get_properties(
     show_dismissed: bool = False,
     starred_only: bool = False,
@@ -163,15 +200,17 @@ def get_properties(
     sort_dir: str = "DESC",
     limit: int = 100,
     offset: int = 0,
+    min_beds: Optional[int] = None,
+    max_beds: Optional[int] = None,
+    min_price: Optional[int] = None,
+    max_price: Optional[int] = None,
+    keyword: str = "",
 ) -> list[dict]:
     conn = get_connection()
-    conditions = []
-    if not show_dismissed:
-        conditions.append("dismissed = 0")
-    if starred_only:
-        conditions.append("starred = 1")
+    where, params = _build_filter_clauses(
+        show_dismissed, starred_only, min_beds, max_beds, min_price, max_price, keyword,
+    )
 
-    where = f"WHERE {' AND '.join(conditions)}" if conditions else ""
     allowed_sorts = {"first_seen", "price", "acres", "bedrooms", "last_seen"}
     sort_col = sort_by if sort_by in allowed_sorts else "first_seen"
     direction = "ASC" if sort_dir.upper() == "ASC" else "DESC"
@@ -180,16 +219,26 @@ def get_properties(
         f"""SELECT * FROM properties {where}
             ORDER BY {sort_col} {direction}
             LIMIT ? OFFSET ?""",
-        (limit, offset),
+        params + [limit, offset],
     ).fetchall()
     conn.close()
     return [dict(r) for r in rows]
 
 
-def get_property_count(show_dismissed: bool = False) -> int:
+def get_property_count(
+    show_dismissed: bool = False,
+    starred_only: bool = False,
+    min_beds: Optional[int] = None,
+    max_beds: Optional[int] = None,
+    min_price: Optional[int] = None,
+    max_price: Optional[int] = None,
+    keyword: str = "",
+) -> int:
     conn = get_connection()
-    cond = "" if show_dismissed else "WHERE dismissed = 0"
-    row = conn.execute(f"SELECT COUNT(*) as cnt FROM properties {cond}").fetchone()
+    where, params = _build_filter_clauses(
+        show_dismissed, starred_only, min_beds, max_beds, min_price, max_price, keyword,
+    )
+    row = conn.execute(f"SELECT COUNT(*) as cnt FROM properties {where}", params).fetchone()
     conn.close()
     return row["cnt"]
 
