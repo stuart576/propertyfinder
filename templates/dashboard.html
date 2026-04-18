@@ -886,17 +886,14 @@
         }
     }
 
-    async function toggleDismiss(id) {
-        const res = await fetch(`/api/toggle/${id}/dismissed`, { method: 'POST' });
-        if (res.ok) {
-            const card = document.getElementById(`card-${id}`);
-            if (card) {
-                card.style.transition = 'opacity 0.3s, transform 0.3s';
-                card.style.opacity = '0';
-                card.style.transform = 'scale(0.95)';
-                setTimeout(() => card.remove(), 300);
-            }
-            showToast('Property hidden');
+    function toggleDismiss(id) {
+        fetch(`/api/toggle/${id}/dismissed`, { method: 'POST' });
+        const card = document.getElementById(`card-${id}`);
+        if (card) {
+            card.style.transition = 'opacity 0.15s, transform 0.15s';
+            card.style.opacity = '0';
+            card.style.transform = 'scale(0.95)';
+            setTimeout(() => card.remove(), 150);
         }
     }
 
