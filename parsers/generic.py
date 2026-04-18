@@ -76,6 +76,7 @@ class GenericParser(BaseParser):
                 "url": clean_url,
                 "image_url": image_url,
                 "description": self.clean_text(full_text[:500]),
+                "postcode": self.extract_postcode(full_text),
             }
 
             if self.passes_filters(prop):
@@ -111,6 +112,7 @@ class GenericParser(BaseParser):
                 "url": url,
                 "image_url": "",
                 "description": self.clean_text(chunk[:500]),
+                "postcode": self.extract_postcode(chunk),
             }
 
             if self.passes_filters(prop):
@@ -139,15 +141,3 @@ class GenericParser(BaseParser):
             return "onthemarket"
         return "other"
 
-    def _extract_location(self, text: str) -> str:
-        patterns = [
-            r"(?:in|at|near)\s+([A-Z][a-zA-Z\s\-]+,\s*(?:Herefordshire|Worcestershire))",
-            r"([A-Z][a-zA-Z\s\-]+,\s*(?:Hereford|Worcester|Ross-on-Wye|Leominster|Ledbury|Malvern))",
-            r"\b(HR\d+\s+\d[A-Z]{2})\b",
-            r"\b(WR\d+\s+\d[A-Z]{2})\b",
-        ]
-        for pattern in patterns:
-            match = re.search(pattern, text)
-            if match:
-                return self.clean_text(match.group(1))
-        return ""

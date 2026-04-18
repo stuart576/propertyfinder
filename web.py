@@ -135,12 +135,57 @@ def email_raw(email_id):
     return Response(body_html, mimetype="text/html")
 
 
+@app.route("/map")
+def map_view():
+    properties = database.get_properties_for_map(show_dismissed=False)
+    stats = database.get_stats()
+    return render_template("map.html", properties=properties, stats=stats, filters=config.FILTERS)
+
+
+@app.route("/api/map-data")
+def map_data():
+    show_dismissed = request.args.get("dismissed", "0") == "1"
+    starred_only = request.args.get("starred", "0") == "1"
+    properties = database.get_properties_for_map(
+        show_dismissed=show_dismissed, starred_only=starred_only,
+    )
+    markers = []
+    for p in properties:
+        markers.append({
+            "id": p["id"],
+            "lat": p["latitude"],
+            "lng": p["longitude"],
+            "title": p["title"] or "Untitled",
+            "price": p["price"],
+            "bedrooms": p["bedrooms"],
+            "acres": p["acres"],
+            "location": p["location"] or p.get("postcode", ""),
+            "url": p["url"],
+            "image_url": p["image_url"] if p.get("image_url") not in ("", "none", None) else "",
+            "source": p["source"],
+            "starred": bool(p["starred"]),
+        })
+    return jsonify(markers)
+
+
+@app.route("/api/geocode", methods=["POST"])
+def trigger_geocode():
+    from geocoder import geocode_properties, backfill_postcodes
+    backfill_postcodes()
+    geocode_properties()
+    return jsonify({"ok": True})
+
+
 @app.route("/api/reprocess", methods=["POST"])
 def reprocess():
     """Clear email log and reset images, then re-check all emails."""
+    from geocoder import geocode_properties, backfill_postcodes
     database.clear_email_log()
     database.reset_images()
+    database.reset_geocodes()
     stats = check_emails()
+    backfill_postcodes()
+    geocode_properties()
     return jsonify(stats)
 
 

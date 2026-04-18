@@ -63,6 +63,18 @@ def init_db():
         conn.execute("ALTER TABLE email_log ADD COLUMN body_html TEXT DEFAULT ''")
         conn.commit()
 
+    # Migrate: add geocoding columns if missing
+    prop_cols = [row[1] for row in conn.execute("PRAGMA table_info(properties)").fetchall()]
+    if "postcode" not in prop_cols:
+        conn.execute("ALTER TABLE properties ADD COLUMN postcode TEXT DEFAULT ''")
+        conn.commit()
+    if "latitude" not in prop_cols:
+        conn.execute("ALTER TABLE properties ADD COLUMN latitude REAL")
+        conn.commit()
+    if "longitude" not in prop_cols:
+        conn.execute("ALTER TABLE properties ADD COLUMN longitude REAL")
+        conn.commit()
+
     conn.close()
 
 
@@ -92,21 +104,21 @@ def upsert_property(data: dict) -> tuple[bool, int]:
     ).fetchone()
 
     if existing:
-        # Update last_seen, and refresh image if we now have a better one
+        # Update last_seen, and refresh image/postcode if we now have better data
         new_image = data.get("image_url", "")
-        if new_image and new_image != "none":
-            cursor.execute(
-                """UPDATE properties SET last_seen = ?,
-                   image_url = CASE WHEN image_url IN ('', 'none') OR image_url IS NULL
-                                    THEN ? ELSE image_url END
-                   WHERE fingerprint = ?""",
-                (datetime.utcnow().isoformat(), new_image, fp),
-            )
-        else:
-            cursor.execute(
-                "UPDATE properties SET last_seen = ? WHERE fingerprint = ?",
-                (datetime.utcnow().isoformat(), fp),
-            )
+        new_postcode = data.get("postcode", "")
+        cursor.execute(
+            """UPDATE properties SET last_seen = ?,
+               image_url = CASE WHEN (image_url IN ('', 'none') OR image_url IS NULL)
+                                 AND ? != '' THEN ? ELSE image_url END,
+               postcode = CASE WHEN (postcode IS NULL OR postcode = '')
+                                AND ? != '' THEN ? ELSE postcode END
+               WHERE fingerprint = ?""",
+            (datetime.utcnow().isoformat(),
+             new_image, new_image,
+             new_postcode, new_postcode,
+             fp),
+        )
         conn.commit()
         pid = existing["id"]
         conn.close()
@@ -114,8 +126,8 @@ def upsert_property(data: dict) -> tuple[bool, int]:
 
     cursor.execute(
         """INSERT INTO properties
-           (fingerprint, source, title, price, bedrooms, acres, location, county, url, image_url, description)
-           VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)""",
+           (fingerprint, source, title, price, bedrooms, acres, location, county, url, image_url, description, postcode)
+           VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)""",
         (
             fp,
             data.get("source", "unknown"),
@@ -128,6 +140,7 @@ def upsert_property(data: dict) -> tuple[bool, int]:
             data.get("url", ""),
             data.get("image_url", ""),
             data.get("description", ""),
+            data.get("postcode", ""),
         ),
     )
     conn.commit()
@@ -338,6 +351,74 @@ def reset_images():
     """Clear all property images so they get re-fetched."""
     conn = get_connection()
     conn.execute("UPDATE properties SET image_url = '' WHERE dismissed = 0")
+    conn.commit()
+    conn.close()
+
+
+def get_properties_missing_geocode(limit: int = 100) -> list[dict]:
+    """Get properties that have a postcode but no lat/lng."""
+    conn = get_connection()
+    rows = conn.execute(
+        """SELECT id, postcode FROM properties
+           WHERE postcode != '' AND postcode IS NOT NULL
+           AND (latitude IS NULL OR longitude IS NULL)
+           LIMIT ?""",
+        (limit,),
+    ).fetchall()
+    conn.close()
+    return [dict(r) for r in rows]
+
+
+def update_geocode(property_id: int, latitude: float, longitude: float):
+    conn = get_connection()
+    conn.execute(
+        "UPDATE properties SET latitude = ?, longitude = ? WHERE id = ?",
+        (latitude, longitude, property_id),
+    )
+    conn.commit()
+    conn.close()
+
+
+def update_postcode(property_id: int, postcode: str):
+    conn = get_connection()
+    conn.execute(
+        "UPDATE properties SET postcode = ? WHERE id = ?",
+        (postcode, property_id),
+    )
+    conn.commit()
+    conn.close()
+
+
+def get_properties_for_map(
+    show_dismissed: bool = False,
+    starred_only: bool = False,
+    min_beds: Optional[int] = None,
+    max_beds: Optional[int] = None,
+    min_price: Optional[int] = None,
+    max_price: Optional[int] = None,
+    keyword: str = "",
+) -> list[dict]:
+    """Get properties that have lat/lng for map display."""
+    where, params = _build_filter_clauses(
+        show_dismissed, starred_only, min_beds, max_beds, min_price, max_price, keyword,
+    )
+    geo_clause = "latitude IS NOT NULL AND longitude IS NOT NULL"
+    if where:
+        where += f" AND {geo_clause}"
+    else:
+        where = f"WHERE {geo_clause}"
+    conn = get_connection()
+    rows = conn.execute(
+        f"SELECT * FROM properties {where}", params
+    ).fetchall()
+    conn.close()
+    return [dict(r) for r in rows]
+
+
+def reset_geocodes():
+    """Clear all geocode data so properties get re-geocoded."""
+    conn = get_connection()
+    conn.execute("UPDATE properties SET latitude = NULL, longitude = NULL")
     conn.commit()
     conn.close()
 

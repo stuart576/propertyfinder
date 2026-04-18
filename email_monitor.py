@@ -14,6 +14,7 @@ import config
 import database
 from parsers import get_parser_for_sender
 from image_scraper import fetch_og_image
+from geocoder import geocode_properties, backfill_postcodes
 
 logger = logging.getLogger("property-finder.email")
 
@@ -263,6 +264,8 @@ def run_monitor_loop():
         try:
             check_emails()
             backfill_images()
+            backfill_postcodes()
+            geocode_properties()
         except Exception as e:
             logger.error(f"Monitor loop error: {e}")
         time.sleep(config.CHECK_INTERVAL)

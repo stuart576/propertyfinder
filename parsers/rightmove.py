@@ -82,6 +82,7 @@ class RightmoveParser(BaseParser):
                 "url": url,
                 "image_url": image_url,
                 "description": self.clean_text(full_text[:500]),
+                "postcode": self.extract_postcode(full_text),
             }
 
             if self.passes_filters(prop):
@@ -92,21 +93,6 @@ class RightmoveParser(BaseParser):
             properties = self._parse_text_fallback(text)
 
         return properties
-
-    def _extract_location(self, text: str) -> str:
-        """Try to extract a location from listing text."""
-        # Look for common Rightmove location patterns
-        patterns = [
-            r"(?:in|at|near)\s+([A-Z][a-zA-Z\s\-]+,\s*(?:Herefordshire|Worcestershire))",
-            r"([A-Z][a-zA-Z\s\-]+,\s*(?:Hereford|Worcester|Ross-on-Wye|Leominster|Ledbury|Malvern|Bromyard|Evesham))",
-            r"\b(HR\d+\s+\d[A-Z]{2})\b",
-            r"\b(WR\d+\s+\d[A-Z]{2})\b",
-        ]
-        for pattern in patterns:
-            match = re.search(pattern, text)
-            if match:
-                return self.clean_text(match.group(1))
-        return ""
 
     def _parse_text_fallback(self, text: str) -> list[dict]:
         """Parse from plain text email as fallback."""
@@ -133,6 +119,7 @@ class RightmoveParser(BaseParser):
                 "url": url,
                 "image_url": "",
                 "description": self.clean_text(chunk[:500]),
+                "postcode": self.extract_postcode(chunk),
             }
             if self.passes_filters(prop):
                 properties.append(prop)

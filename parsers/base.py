@@ -111,6 +111,42 @@ class BaseParser:
         return True
 
     @staticmethod
+    def extract_postcode(text: str) -> str:
+        """Extract a UK postcode from text. Returns first full postcode found, normalised."""
+        if not text:
+            return ""
+        match = re.search(
+            r'\b([A-Z]{1,2}\d{1,2}[A-Z]?)\s*(\d[A-Z]{2})\b',
+            text.upper(),
+        )
+        if match:
+            return f"{match.group(1)} {match.group(2)}"
+        return ""
+
+    @staticmethod
+    def extract_postcode_from_fields(title: str, location: str, description: str) -> str:
+        """Try to extract a postcode from multiple text fields."""
+        for text in [location, title, description]:
+            pc = BaseParser.extract_postcode(text)
+            if pc:
+                return pc
+        return ""
+
+    def _extract_location(self, text: str) -> str:
+        """Extract location from listing text."""
+        patterns = [
+            r"(?:in|at|near)\s+([A-Z][a-zA-Z\s\-]+,\s*(?:Herefordshire|Worcestershire))",
+            r"([A-Z][a-zA-Z\s\-]+,\s*(?:Hereford|Worcester|Ross-on-Wye|Leominster|Ledbury|Malvern|Bromyard|Evesham))",
+            r"\b(HR\d+\s+\d[A-Z]{2})\b",
+            r"\b(WR\d+\s+\d[A-Z]{2})\b",
+        ]
+        for pattern in patterns:
+            match = re.search(pattern, text)
+            if match:
+                return self.clean_text(match.group(1))
+        return ""
+
+    @staticmethod
     def clean_text(text: str) -> str:
         """Clean up extracted text."""
         if not text:
