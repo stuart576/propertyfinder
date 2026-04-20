@@ -176,6 +176,35 @@ def trigger_geocode():
     return jsonify({"ok": True})
 
 
+@app.route("/api/postcode/<int:property_id>", methods=["POST"])
+def set_postcode(property_id):
+    """Manually set a postcode for a property and geocode it."""
+    from geocoder import bulk_lookup_postcodes
+    from parsers.base import BaseParser
+
+    data = request.get_json() or {}
+    raw = (data.get("postcode", "") or "").strip()
+    if not raw:
+        # Empty = clear postcode and geocode
+        database.update_postcode(property_id, "")
+        database.update_geocode(property_id, None, None)
+        return jsonify({"ok": True, "postcode": "", "geocoded": False})
+
+    # Normalise via regex (also validates format)
+    normalised = BaseParser.extract_postcode(raw)
+    if not normalised:
+        return jsonify({"ok": False, "error": "Invalid UK postcode"}), 400
+
+    database.update_postcode(property_id, normalised)
+    # Geocode immediately
+    results = bulk_lookup_postcodes([normalised])
+    coords = results.get(normalised)
+    if coords:
+        database.update_geocode(property_id, coords["latitude"], coords["longitude"])
+        return jsonify({"ok": True, "postcode": normalised, "geocoded": True})
+    return jsonify({"ok": True, "postcode": normalised, "geocoded": False})
+
+
 @app.route("/api/reprocess", methods=["POST"])
 def reprocess():
     """Clear email log and reset images, then re-check all emails."""

@@ -813,6 +813,9 @@
             {% endif %}
             <div style="display: flex; align-items: center; gap: 0.5rem;">
                 <button class="btn btn-outline" style="padding: 0.25rem 0.5rem; font-size: 0.7rem;"
+                        title="{% if prop.postcode %}Postcode: {{ prop.postcode }}{% else %}Set postcode{% endif %}"
+                        onclick="openPostcode({{ prop.id }}, '{{ prop.postcode or '' }}')">📍{% if prop.postcode %} {{ prop.postcode }}{% endif %}</button>
+                <button class="btn btn-outline" style="padding: 0.25rem 0.5rem; font-size: 0.7rem;"
                         onclick="openNotes({{ prop.id }}, '{{ prop.notes|replace("'", "\\'") }}')">📝</button>
                 <span class="card-date">{{ prop.first_seen[:10] if prop.first_seen else '' }}</span>
             </div>
@@ -863,11 +866,29 @@
     </div>
 </div>
 
+<!-- Postcode Modal -->
+<div class="modal-overlay" id="postcodeModal">
+    <div class="modal">
+        <h3>Set Postcode</h3>
+        <p style="color: var(--text-muted); font-size: 0.85rem; margin-bottom: 0.75rem;">
+            Enter a UK postcode to plot this property on the map.
+        </p>
+        <input type="text" id="postcodeText" placeholder="e.g. HR1 2AB"
+               style="width: 100%; padding: 0.75rem; border: 1px solid var(--border); border-radius: var(--radius-sm); font-family: inherit; font-size: 1rem; text-transform: uppercase;">
+        <div class="modal-actions">
+            <button class="btn btn-outline" onclick="clearPostcode()" style="margin-right: auto;">Clear</button>
+            <button class="btn btn-outline" onclick="closePostcode()">Cancel</button>
+            <button class="btn btn-primary" onclick="savePostcode()">Save</button>
+        </div>
+    </div>
+</div>
+
 <!-- Toast -->
 <div class="toast" id="toast"></div>
 
 <script>
     let currentNotesId = null;
+    let currentPostcodeId = null;
 
     function applySort(val) {
         const [sort, dir] = val.split('-');
@@ -923,6 +944,46 @@
         }
     }
 
+    function openPostcode(id, existing) {
+        currentPostcodeId = id;
+        document.getElementById('postcodeText').value = existing || '';
+        document.getElementById('postcodeModal').classList.add('open');
+        document.getElementById('postcodeText').focus();
+    }
+
+    function closePostcode() {
+        document.getElementById('postcodeModal').classList.remove('open');
+        currentPostcodeId = null;
+    }
+
+    async function savePostcode() {
+        if (!currentPostcodeId) return;
+        const postcode = document.getElementById('postcodeText').value.trim();
+        const res = await fetch(`/api/postcode/${currentPostcodeId}`, {
+            method: 'POST',
+            headers: { 'Content-Type': 'application/json' },
+            body: JSON.stringify({ postcode })
+        });
+        const data = await res.json();
+        if (data.ok) {
+            closePostcode();
+            if (data.geocoded) {
+                showToast(`Saved ${data.postcode} and mapped`);
+            } else {
+                showToast(`Saved ${data.postcode || '(cleared)'}`);
+            }
+            setTimeout(() => window.location.reload(), 800);
+        } else {
+            showToast(data.error || 'Save failed');
+        }
+    }
+
+    async function clearPostcode() {
+        if (!currentPostcodeId) return;
+        document.getElementById('postcodeText').value = '';
+        await savePostcode();
+    }
+
     async function checkNow() {
         const indicator = document.getElementById('checkingIndicator');
         indicator.classList.add('visible');
@@ -970,14 +1031,25 @@
         setTimeout(() => toast.classList.remove('show'), 3000);
     }
 
-    // Close modal on overlay click
+    // Close modals on overlay click
     document.getElementById('notesModal').addEventListener('click', function(e) {
         if (e.target === this) closeNotes();
     });
+    document.getElementById('postcodeModal').addEventListener('click', function(e) {
+        if (e.target === this) closePostcode();
+    });
 
-    // Escape key closes modal
+    // Escape key closes modals
     document.addEventListener('keydown', function(e) {
-        if (e.key === 'Escape') closeNotes();
+        if (e.key === 'Escape') {
+            closeNotes();
+            closePostcode();
+        }
+    });
+
+    // Enter key in postcode input saves
+    document.getElementById('postcodeText').addEventListener('keydown', function(e) {
+        if (e.key === 'Enter') savePostcode();
     });
 </script>
 </body>
