@@ -50,6 +50,13 @@ def init_db():
             body_html TEXT DEFAULT ''
         );
 
+        CREATE TABLE IF NOT EXISTS geocode_cache (
+            location_key TEXT PRIMARY KEY,
+            latitude REAL,
+            longitude REAL,
+            created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP
+        );
+
         CREATE INDEX IF NOT EXISTS idx_properties_price ON properties(price);
         CREATE INDEX IF NOT EXISTS idx_properties_county ON properties(county);
         CREATE INDEX IF NOT EXISTS idx_properties_dismissed ON properties(dismissed);
@@ -421,6 +428,59 @@ def reset_geocodes():
     conn.execute("UPDATE properties SET latitude = NULL, longitude = NULL")
     conn.commit()
     conn.close()
+
+
+def get_cached_geocode(location_key: str) -> Optional[tuple[Optional[float], Optional[float]]]:
+    """
+    Look up a cached location geocode. Returns None if not cached,
+    or (lat, lng) which may itself be (None, None) for known failures.
+    """
+    conn = get_connection()
+    row = conn.execute(
+        "SELECT latitude, longitude FROM geocode_cache WHERE location_key = ?",
+        (location_key,),
+    ).fetchone()
+    conn.close()
+    if row is None:
+        return None
+    return (row["latitude"], row["longitude"])
+
+
+def cache_geocode(location_key: str, latitude: Optional[float], longitude: Optional[float]):
+    """Cache a location lookup result. Store NULLs for failures so we don't retry."""
+    conn = get_connection()
+    conn.execute(
+        """INSERT OR REPLACE INTO geocode_cache (location_key, latitude, longitude)
+           VALUES (?, ?, ?)""",
+        (location_key, latitude, longitude),
+    )
+    conn.commit()
+    conn.close()
+
+
+def clear_geocode_cache():
+    conn = get_connection()
+    conn.execute("DELETE FROM geocode_cache")
+    conn.commit()
+    conn.close()
+
+
+def get_properties_needing_location_geocode(limit: int = 200) -> list[dict]:
+    """
+    Get properties without lat/lng but with some location/county text to try.
+    Skips properties that have a postcode (those go through the postcode path).
+    """
+    conn = get_connection()
+    rows = conn.execute(
+        """SELECT id, location, county FROM properties
+           WHERE (latitude IS NULL OR longitude IS NULL)
+           AND (postcode IS NULL OR postcode = '')
+           AND ((location IS NOT NULL AND location != '') OR (county IS NOT NULL AND county != ''))
+           LIMIT ?""",
+        (limit,),
+    ).fetchall()
+    conn.close()
+    return [dict(r) for r in rows]
 
 
 def update_notes(property_id: int, notes: str):

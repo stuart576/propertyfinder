@@ -1,6 +1,8 @@
-"""Geocode UK postcodes using postcodes.io (free, no API key)."""
+"""Geocode UK postcodes via postcodes.io and fallback to Nominatim for locations."""
 import json
 import logging
+import time
+from urllib.parse import urlencode
 from urllib.request import Request, urlopen
 from urllib.error import HTTPError, URLError
 
@@ -10,6 +12,13 @@ from parsers.base import BaseParser
 logger = logging.getLogger("property-finder.geocoder")
 
 POSTCODES_IO_URL = "https://api.postcodes.io"
+NOMINATIM_URL = "https://nominatim.openstreetmap.org/search"
+
+# Nominatim policy requires a User-Agent that identifies the application
+NOMINATIM_USER_AGENT = "PropertyFinder/1.0 (stuart.parsons1@gmail.com)"
+
+# Nominatim rate limit: max 1 request per second
+_last_nominatim_call = 0.0
 
 
 def bulk_lookup_postcodes(postcodes: list[str]) -> dict[str, dict]:
@@ -95,3 +104,88 @@ def backfill_postcodes():
 
     if count:
         logger.info(f"Backfilled postcodes for {count} properties")
+
+
+def _location_cache_key(location: str, county: str) -> str:
+    """Build a normalised cache key from location + county."""
+    return f"{(location or '').strip().lower()}|{(county or '').strip().lower()}"
+
+
+def _nominatim_lookup(location: str, county: str) -> tuple[float, float] | None:
+    """
+    Query Nominatim for a location. Respects 1 req/sec rate limit.
+    Returns (lat, lng) or None on failure.
+    """
+    global _last_nominatim_call
+
+    # Build query — only include non-empty parts
+    parts = [p for p in [location.strip(), county.strip(), "UK"] if p]
+    if not parts or parts == ["UK"]:
+        return None
+    query = ", ".join(parts)
+
+    url = f"{NOMINATIM_URL}?{urlencode({'q': query, 'format': 'json', 'limit': '1'})}"
+
+    # Rate limit: 1 req/sec
+    elapsed = time.time() - _last_nominatim_call
+    if elapsed < 1.1:
+        time.sleep(1.1 - elapsed)
+
+    req = Request(url, method="GET")
+    req.add_header("User-Agent", NOMINATIM_USER_AGENT)
+    req.add_header("Accept", "application/json")
+
+    try:
+        with urlopen(req, timeout=15) as resp:
+            _last_nominatim_call = time.time()
+            data = json.loads(resp.read().decode())
+            if data and isinstance(data, list):
+                lat = float(data[0]["lat"])
+                lng = float(data[0]["lon"])
+                return (lat, lng)
+    except (HTTPError, URLError, OSError, KeyError, ValueError) as e:
+        _last_nominatim_call = time.time()
+        logger.debug(f"Nominatim lookup failed for '{query}': {e}")
+
+    return None
+
+
+def geocode_location(location: str, county: str) -> tuple[float | None, float | None]:
+    """
+    Geocode a location via Nominatim, using the cache to avoid repeat queries.
+    Returns (lat, lng), each of which may be None if the lookup failed.
+    """
+    key = _location_cache_key(location, county)
+    cached = database.get_cached_geocode(key)
+    if cached is not None:
+        return cached  # (lat, lng), possibly (None, None)
+
+    coords = _nominatim_lookup(location, county)
+    if coords:
+        database.cache_geocode(key, coords[0], coords[1])
+        return coords
+
+    # Cache the failure so we don't retry
+    database.cache_geocode(key, None, None)
+    return (None, None)
+
+
+def geocode_all_unmatched():
+    """
+    Geocode properties that have no lat/lng and no postcode, using Nominatim
+    with the location + county text. Caches results per unique location.
+    """
+    props = database.get_properties_needing_location_geocode(limit=500)
+    if not props:
+        return
+
+    logger.info(f"Location-geocoding {len(props)} unmatched properties...")
+
+    matched = 0
+    for prop in props:
+        lat, lng = geocode_location(prop.get("location") or "", prop.get("county") or "")
+        if lat is not None and lng is not None:
+            database.update_geocode(prop["id"], lat, lng)
+            matched += 1
+
+    logger.info(f"Location-geocoding complete: matched {matched}/{len(props)}")

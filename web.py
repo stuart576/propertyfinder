@@ -170,9 +170,10 @@ def map_data():
 
 @app.route("/api/geocode", methods=["POST"])
 def trigger_geocode():
-    from geocoder import geocode_properties, backfill_postcodes
+    from geocoder import geocode_properties, backfill_postcodes, geocode_all_unmatched
     backfill_postcodes()
     geocode_properties()
+    geocode_all_unmatched()
     return jsonify({"ok": True})
 
 
@@ -209,23 +210,25 @@ def set_postcode(property_id):
 def sync_uklaf_route():
     """Scrape UKLAF listings and upsert into the database."""
     from uklaf_scraper import sync_uklaf
-    from geocoder import geocode_properties, backfill_postcodes
+    from geocoder import geocode_properties, backfill_postcodes, geocode_all_unmatched
     stats = sync_uklaf()
     backfill_postcodes()
     geocode_properties()
+    geocode_all_unmatched()
     return jsonify(stats)
 
 
 @app.route("/api/reprocess", methods=["POST"])
 def reprocess():
     """Clear email log and reset images, then re-check all emails."""
-    from geocoder import geocode_properties, backfill_postcodes
+    from geocoder import geocode_properties, backfill_postcodes, geocode_all_unmatched
     database.clear_email_log()
     database.reset_images()
     database.reset_geocodes()
     stats = check_emails()
     backfill_postcodes()
     geocode_properties()
+    geocode_all_unmatched()
     return jsonify(stats)
 
 
