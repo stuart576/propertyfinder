@@ -612,6 +612,7 @@
             <span>Checking emails…</span>
         </div>
         <button class="btn btn-primary" onclick="checkNow()">⟳ Check Now</button>
+        <button class="btn btn-ghost" onclick="syncUklaf()" title="Scrape latest listings from UK Land and Farms">🌾 Sync UKLAF</button>
         <button class="btn btn-ghost" onclick="reprocess()" title="Re-parse all emails and refresh images">🔄 Reprocess</button>
         <a href="/map" class="btn btn-ghost">Map</a>
         <a href="/emails" class="btn btn-ghost">Emails</a>
@@ -1002,6 +1003,24 @@
         } catch (e) {
             indicator.classList.remove('visible');
             showToast('Check failed — see logs');
+        }
+    }
+
+    async function syncUklaf() {
+        const indicator = document.getElementById('checkingIndicator');
+        indicator.querySelector('span').textContent = 'Scraping UKLAF…';
+        indicator.classList.add('visible');
+        try {
+            const res = await fetch('/api/sync-uklaf', { method: 'POST' });
+            const data = await res.json();
+            indicator.classList.remove('visible');
+            indicator.querySelector('span').textContent = 'Checking emails…';
+            showToast(`UKLAF: ${data.new} new, ${data.updated} updated (${data.fetched} fetched)`);
+            if (data.new > 0) setTimeout(() => window.location.reload(), 1500);
+        } catch (e) {
+            indicator.classList.remove('visible');
+            indicator.querySelector('span').textContent = 'Checking emails…';
+            showToast('UKLAF sync failed — see logs');
         }
     }
 

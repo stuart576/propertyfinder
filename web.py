@@ -205,6 +205,17 @@ def set_postcode(property_id):
     return jsonify({"ok": True, "postcode": normalised, "geocoded": False})
 
 
+@app.route("/api/sync-uklaf", methods=["POST"])
+def sync_uklaf_route():
+    """Scrape UKLAF listings and upsert into the database."""
+    from uklaf_scraper import sync_uklaf
+    from geocoder import geocode_properties, backfill_postcodes
+    stats = sync_uklaf()
+    backfill_postcodes()
+    geocode_properties()
+    return jsonify(stats)
+
+
 @app.route("/api/reprocess", methods=["POST"])
 def reprocess():
     """Clear email log and reset images, then re-check all emails."""
