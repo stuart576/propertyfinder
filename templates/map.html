@@ -175,9 +175,64 @@
         }
         .property-popup a:hover { text-decoration: underline; }
 
-        /* Starred marker */
-        .starred-marker {
-            filter: hue-rotate(200deg) saturate(1.5);
+        /* Custom markers — remove divIcon background */
+        .custom-marker {
+            background: transparent;
+            border: none;
+        }
+        .custom-marker svg {
+            filter: drop-shadow(0 2px 3px rgba(0,0,0,0.35));
+        }
+
+        /* Legend */
+        .map-legend {
+            position: absolute;
+            bottom: 1rem;
+            right: 1rem;
+            background: var(--bg-card);
+            border: 1px solid var(--border);
+            border-radius: var(--radius);
+            padding: 0.6rem 0.85rem;
+            box-shadow: var(--shadow-sm);
+            font-size: 0.75rem;
+            z-index: 500;
+            max-width: 180px;
+        }
+
+        .map-legend h4 {
+            font-size: 0.7rem;
+            text-transform: uppercase;
+            letter-spacing: 0.08em;
+            color: var(--text-light);
+            font-weight: 500;
+            margin-bottom: 0.4rem;
+        }
+
+        .legend-item {
+            display: flex;
+            align-items: center;
+            gap: 0.5rem;
+            padding: 0.12rem 0;
+            color: var(--text);
+        }
+
+        .legend-swatch {
+            width: 12px;
+            height: 12px;
+            border-radius: 50%;
+            border: 2px solid white;
+            box-shadow: 0 0 0 1px rgba(0,0,0,0.15);
+            flex-shrink: 0;
+        }
+
+        .legend-star {
+            width: 12px;
+            height: 12px;
+            border-radius: 50%;
+            background: #888;
+            border: 2px solid var(--star);
+            box-shadow: 0 0 0 1px rgba(0,0,0,0.15);
+            flex-shrink: 0;
         }
 
         @media (max-width: 768px) {
@@ -223,16 +278,39 @@
         showCoverageOnHover: false,
     });
 
-    const starIcon = L.icon({
-        iconUrl: 'https://unpkg.com/leaflet@1.9.4/dist/images/marker-icon.png',
-        iconRetinaUrl: 'https://unpkg.com/leaflet@1.9.4/dist/images/marker-icon-2x.png',
-        shadowUrl: 'https://unpkg.com/leaflet@1.9.4/dist/images/marker-shadow.png',
-        iconSize: [25, 41],
-        iconAnchor: [12, 41],
-        popupAnchor: [1, -34],
-        shadowSize: [41, 41],
-        className: 'starred-marker',
-    });
+    const SOURCE_COLORS = {
+        rightmove:      '#00d06b',
+        zoopla:         '#7d4bc3',
+        onthemarket:    '#e74c3c',
+        uklandandfarms: '#8b6c3e',
+        smallholdingsforsale: '#c98a2d',
+        primelocation:  '#1f6feb',
+        other:          '#6b6b6b',
+    };
+
+    function sourceColor(source) {
+        return SOURCE_COLORS[source] || SOURCE_COLORS.other;
+    }
+
+    function makeIcon(source, starred) {
+        const color = sourceColor(source);
+        const strokeColor = starred ? '#d4a843' : '#ffffff';
+        const strokeWidth = starred ? 3 : 2;
+        const svg = `
+            <svg width="30" height="42" viewBox="0 0 30 42" xmlns="http://www.w3.org/2000/svg">
+                <path d="M15 0C6.7 0 0 6.7 0 15c0 11 15 27 15 27s15-16 15-27C30 6.7 23.3 0 15 0z"
+                      fill="${color}" stroke="${strokeColor}" stroke-width="${strokeWidth}"/>
+                <circle cx="15" cy="14" r="5" fill="#ffffff"/>
+            </svg>
+        `;
+        return L.divIcon({
+            html: svg,
+            className: 'custom-marker',
+            iconSize: [30, 42],
+            iconAnchor: [15, 42],
+            popupAnchor: [0, -38],
+        });
+    }
 
     const properties = {{ properties | tojson }};
 
@@ -250,7 +328,7 @@
         const popup = `
             <div class="property-popup">
                 ${imgHtml}
-                <span class="popup-source">${p.source}</span>
+                <span class="popup-source" style="background:${sourceColor(p.source)}">${p.source}</span>
                 <div class="popup-price">${priceStr}</div>
                 <div class="popup-title">${p.title || 'Untitled property'}</div>
                 <div class="popup-meta">${metaParts.join(' · ')}</div>
@@ -258,10 +336,30 @@
             </div>
         `;
 
-        const opts = p.starred ? { icon: starIcon } : {};
-        const marker = L.marker([p.latitude, p.longitude], opts).bindPopup(popup, { maxWidth: 300 });
+        const marker = L.marker(
+            [p.latitude, p.longitude],
+            { icon: makeIcon(p.source, p.starred) }
+        ).bindPopup(popup, { maxWidth: 300 });
         markers.addLayer(marker);
     });
+
+    // Build legend showing only sources present in the data
+    const presentSources = [...new Set(properties.map(p => p.source))].sort();
+    if (presentSources.length > 0) {
+        const legend = document.createElement('div');
+        legend.className = 'map-legend';
+        const items = presentSources.map(src =>
+            `<div class="legend-item">
+                <span class="legend-swatch" style="background:${sourceColor(src)}"></span>
+                ${src}
+            </div>`
+        ).join('');
+        const starredRow = properties.some(p => p.starred)
+            ? `<div class="legend-item"><span class="legend-star"></span>starred</div>`
+            : '';
+        legend.innerHTML = `<h4>Sources</h4>${items}${starredRow}`;
+        document.body.appendChild(legend);
+    }
 
     map.addLayer(markers);
 
