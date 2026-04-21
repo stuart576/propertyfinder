@@ -451,6 +451,23 @@
             font-style: italic;
         }
 
+        /* Postcode / geocoding button states */
+        .pc-btn.pc-geocoded {
+            background: var(--accent-light);
+            border-color: var(--accent);
+            color: var(--accent);
+        }
+        .pc-btn.pc-pending {
+            background: #fdf4e4;
+            border-color: #d9a85c;
+            color: #8a6213;
+        }
+        .pc-btn.pc-missing {
+            background: transparent;
+            border-color: var(--border);
+            color: var(--text-light);
+        }
+
         /* ── Notes Modal ── */
         .modal-overlay {
             display: none;
@@ -813,9 +830,11 @@
             <span></span>
             {% endif %}
             <div style="display: flex; align-items: center; gap: 0.5rem;">
-                <button class="btn btn-outline" style="padding: 0.25rem 0.5rem; font-size: 0.7rem;"
-                        title="{% if prop.postcode %}Postcode: {{ prop.postcode }}{% else %}Set postcode{% endif %}"
-                        onclick="openPostcode({{ prop.id }}, '{{ prop.postcode or '' }}')">📍{% if prop.postcode %} {{ prop.postcode }}{% endif %}</button>
+                {% set is_geocoded = prop.latitude is not none and prop.longitude is not none %}
+                <button class="btn btn-outline pc-btn {% if is_geocoded %}pc-geocoded{% elif prop.postcode %}pc-pending{% else %}pc-missing{% endif %}"
+                        style="padding: 0.25rem 0.5rem; font-size: 0.7rem;"
+                        title="{% if is_geocoded %}Mapped ({{ prop.latitude|round(4) }}, {{ prop.longitude|round(4) }}){% if prop.postcode %} — {{ prop.postcode }}{% endif %}{% elif prop.postcode %}Postcode set but not yet geocoded: {{ prop.postcode }}{% else %}No postcode — click to set{% endif %}"
+                        onclick="openPostcode({{ prop.id }}, '{{ prop.postcode or '' }}')">{% if is_geocoded %}📍{% elif prop.postcode %}⚠️{% else %}❓{% endif %}{% if prop.postcode %} {{ prop.postcode }}{% endif %}</button>
                 <button class="btn btn-outline" style="padding: 0.25rem 0.5rem; font-size: 0.7rem;"
                         onclick="openNotes({{ prop.id }}, '{{ prop.notes|replace("'", "\\'") }}')">📝</button>
                 <span class="card-date">{{ prop.first_seen[:10] if prop.first_seen else '' }}</span>
