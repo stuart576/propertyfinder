@@ -129,6 +129,109 @@ def _parse_listing_li(li, county: str) -> dict | None:
     }
 
 
+def _parse_detail_page(html: str) -> dict:
+    """
+    Parse a UKLAF detail page. Returns a dict of fields to merge into the
+    listing card data (empty fields are skipped by the caller).
+    """
+    if not html:
+        return {}
+    soup = BeautifulSoup(html, "html.parser")
+    result: dict = {}
+
+    # Main heading: e.g. "23.59 acres, Hereford, Herefordshire, HR5 3RW"
+    h1 = soup.find("h1")
+    h1_head = ""
+    if h1:
+        h1_html = h1.decode_contents()
+        h1_head = BeautifulSoup(
+            re.split(r"<br\s*/?>", h1_html, maxsplit=1, flags=re.IGNORECASE)[0],
+            "html.parser",
+        ).get_text(separator=" ", strip=True)
+
+    # Postcode: try h1 first, then the Google Maps quicklink (q=HR5 3RW)
+    postcode = BaseParser.extract_postcode(h1_head)
+    if not postcode:
+        maps_link = soup.find("a", href=re.compile(r"maps\.google", re.IGNORECASE))
+        if maps_link:
+            postcode = BaseParser.extract_postcode(maps_link.get("href", ""))
+    if postcode:
+        result["postcode"] = postcode
+
+    # Location: strip "NN.NN acres, " prefix from h1 head, and trailing postcode
+    if h1_head:
+        loc = re.sub(r"^\s*\d+(?:\.\d+)?\s*acres?[, ]*", "", h1_head, flags=re.IGNORECASE)
+        if postcode:
+            loc = loc.replace(postcode, "")
+        loc = BaseParser.clean_text(loc).rstrip(", ").strip()
+        if loc:
+            result["location"] = loc
+
+    # Best image: prefer the full-size pop_*, then the medium man_*,
+    # falling back to any property image in the gallery
+    gallery = soup.find("div", id="ImageGallery")
+    if gallery:
+        best_img = ""
+        for a in gallery.find_all("a"):
+            img = a.find("img")
+            if not img:
+                continue
+            for key in ("data-big", "href", "src", "data-src"):
+                val = a.get(key) if key in ("href",) else img.get(key, "")
+                if not val:
+                    continue
+                if val.startswith("/media/properties/"):
+                    best_img = urljoin(BASE_URL, val)
+                    break
+            if best_img and ("pop_" in best_img or "man_" in best_img):
+                break
+        if best_img:
+            result["image_url"] = best_img
+
+    # Description: the biggest <p class="clearboth"> block
+    desc_parts = []
+    for p in soup.find_all("p", class_="clearboth"):
+        text = p.get_text(separator=" ", strip=True)
+        if len(text) > 100:
+            desc_parts.append(text)
+    if desc_parts:
+        full_desc = " ".join(desc_parts)
+        result["description"] = BaseParser.clean_text(full_desc)[:4000]
+
+    # Feature bullets: sometimes surface bedrooms
+    feature_ul = soup.find("ul", class_="clearboth")
+    if feature_ul:
+        bullets_text = feature_ul.get_text(separator=" ", strip=True)
+        beds = BaseParser.extract_bedrooms(bullets_text)
+        if beds:
+            result["bedrooms"] = beds
+
+    # Fallback: title from h1 if more specific than the card
+    if h1_head:
+        result["title"] = BaseParser.clean_text(h1_head)[:200]
+
+    return result
+
+
+def fetch_detail_page(url: str) -> dict:
+    """Fetch a detail page URL and parse it. Respects rate limit via caller."""
+    html = fetch_page(url)
+    return _parse_detail_page(html)
+
+
+def enrich_with_detail_page(prop: dict):
+    """Fetch the detail page and merge better data into the listing dict in-place."""
+    detail = fetch_detail_page(prop["url"])
+    for key, value in detail.items():
+        if not value:
+            continue
+        # Always prefer detail-page values for these, otherwise only fill gaps
+        if key in ("description", "image_url", "postcode", "location", "title"):
+            prop[key] = value
+        elif not prop.get(key):
+            prop[key] = value
+
+
 def parse_listings(html: str, county: str) -> list[dict]:
     """Parse a listings page and return a list of property dicts."""
     if not html:
@@ -199,6 +302,16 @@ def scrape_county(county: str) -> list[dict]:
 
         logger.info(f"  Found {len(new_on_page)} listings on page {page}")
         time.sleep(DELAY_SECONDS)
+
+    # Enrich each listing by fetching its detail page
+    logger.info(f"Enriching {len(all_props)} {county} listings from detail pages...")
+    for i, prop in enumerate(all_props, start=1):
+        try:
+            enrich_with_detail_page(prop)
+        except Exception as e:
+            logger.warning(f"  Detail fetch failed for {prop['url']}: {e}")
+        if i < len(all_props):
+            time.sleep(DELAY_SECONDS)
 
     return all_props
 
