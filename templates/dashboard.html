@@ -820,18 +820,6 @@
 
             <div class="card-title">{{ prop.title or 'Untitled property' }}</div>
 
-            <div class="card-meta">
-                {% if prop.bedrooms %}
-                <span class="card-meta-item">🛏 {{ prop.bedrooms }} bed{{ 's' if prop.bedrooms != 1 }}</span>
-                {% endif %}
-                {% if prop.acres %}
-                <span class="card-meta-item">🌾 {{ prop.acres }} acres</span>
-                {% endif %}
-                {% if prop.county %}
-                <span class="card-meta-item">📍 {{ prop.county|capitalize }}</span>
-                {% endif %}
-            </div>
-
             {% if prop.location %}
             <div class="card-location">{{ prop.location }}</div>
             {% endif %}
