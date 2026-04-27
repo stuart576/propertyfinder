@@ -229,12 +229,12 @@ def trigger_analyze():
 
 @app.route("/api/analyze/<int:property_id>", methods=["POST"])
 def analyze_one(property_id):
-    """Manually re-analyze a single property without auto-dismiss."""
+    """Manually re-analyze a single property without auto-dismiss. Returns trace."""
     from analyzer import analyze_property_by_id
-    result = analyze_property_by_id(property_id)
+    result, steps = analyze_property_by_id(property_id, with_trace=True)
     if result is None:
         return jsonify({"ok": False, "error": "Property not found"}), 404
-    return jsonify({"ok": True, **result})
+    return jsonify({"ok": True, "steps": steps, **result})
 
 
 @app.route("/api/reprocess", methods=["POST"])

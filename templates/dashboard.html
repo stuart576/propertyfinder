@@ -451,6 +451,60 @@
             font-style: italic;
         }
 
+        /* Analysis trace */
+        .trace-step {
+            border-left: 3px solid var(--border);
+            padding: 0.4rem 0.75rem;
+            margin-bottom: 0.4rem;
+            background: var(--bg);
+            border-radius: 0 var(--radius-sm) var(--radius-sm) 0;
+        }
+        .trace-step.warn { border-left-color: #d9a85c; background: #fdf6eb; }
+        .trace-step.error { border-left-color: var(--danger); background: var(--danger-light); }
+        .trace-step.info { border-left-color: var(--accent); }
+
+        .trace-label {
+            font-size: 0.78rem;
+            font-weight: 600;
+            color: var(--text);
+        }
+
+        .trace-detail {
+            font-size: 0.78rem;
+            color: var(--text-muted);
+            margin-top: 0.15rem;
+            font-family: ui-monospace, SFMono-Regular, monospace;
+            word-break: break-word;
+        }
+
+        .trace-data {
+            margin-top: 0.4rem;
+            font-family: ui-monospace, SFMono-Regular, monospace;
+            font-size: 0.72rem;
+            background: var(--bg-card);
+            border: 1px solid var(--border);
+            border-radius: var(--radius-sm);
+            padding: 0.5rem;
+            max-height: 200px;
+            overflow-y: auto;
+            white-space: pre-wrap;
+            word-break: break-word;
+            color: var(--text);
+        }
+
+        .trace-toggle {
+            display: inline-block;
+            margin-top: 0.25rem;
+            font-size: 0.72rem;
+            color: var(--accent);
+            cursor: pointer;
+            text-decoration: underline;
+            background: none;
+            border: none;
+            padding: 0;
+            font-family: inherit;
+        }
+
         /* Postcode / geocoding button states */
         .pc-btn.pc-geocoded {
             background: var(--accent-light);
@@ -916,6 +970,20 @@
     </div>
 </div>
 
+<!-- Analysis Trace Modal -->
+<div class="modal-overlay" id="traceModal">
+    <div class="modal" style="max-width: 720px; max-height: 85vh; display: flex; flex-direction: column;">
+        <h3 style="display: flex; align-items: center; justify-content: space-between;">
+            <span>🤖 AI Analysis Trace</span>
+            <span id="traceSummary" style="font-size: 0.8rem; color: var(--text-muted); font-weight: 400;"></span>
+        </h3>
+        <div id="traceBody" style="overflow-y: auto; flex: 1; margin-top: 0.5rem; min-height: 200px;"></div>
+        <div class="modal-actions">
+            <button class="btn btn-outline" onclick="closeTrace()">Close</button>
+        </div>
+    </div>
+</div>
+
 <!-- Toast -->
 <div class="toast" id="toast"></div>
 
@@ -1045,20 +1113,68 @@
         try {
             const res = await fetch(`/api/analyze/${id}`, { method: 'POST' });
             const data = await res.json();
-            if (data.ok) {
-                const acres = data.acres != null ? `, ${data.acres} acres` : '';
-                showToast(`${data.property_type}${acres} (${data.method})`);
-                setTimeout(() => window.location.reload(), 800);
-            } else {
-                showToast(data.error || 'Analysis failed');
-                btn.textContent = original;
-                btn.disabled = false;
-            }
-        } catch (e) {
-            showToast('Analysis failed — see logs');
             btn.textContent = original;
             btn.disabled = false;
+            if (data.ok) {
+                showTrace(data);
+            } else {
+                showToast(data.error || 'Analysis failed');
+            }
+        } catch (e) {
+            btn.textContent = original;
+            btn.disabled = false;
+            showToast('Analysis failed — see logs');
         }
+    }
+
+    function showTrace(data) {
+        const summary = document.getElementById('traceSummary');
+        const acres = data.acres != null ? ` · ${data.acres} acres` : '';
+        summary.textContent = `${data.property_type}${acres} (${data.method})`;
+
+        const body = document.getElementById('traceBody');
+        body.innerHTML = '';
+        (data.steps || []).forEach((step, i) => {
+            const div = document.createElement('div');
+            div.className = `trace-step ${step.level || 'info'}`;
+            const labelEl = document.createElement('div');
+            labelEl.className = 'trace-label';
+            labelEl.textContent = `${i + 1}. ${step.label}`;
+            div.appendChild(labelEl);
+            if (step.detail) {
+                const d = document.createElement('div');
+                d.className = 'trace-detail';
+                d.textContent = step.detail;
+                div.appendChild(d);
+            }
+            if (step.data) {
+                const toggle = document.createElement('button');
+                toggle.className = 'trace-toggle';
+                toggle.textContent = `Show details (${step.data.length} chars)`;
+                const dataEl = document.createElement('div');
+                dataEl.className = 'trace-data';
+                dataEl.style.display = 'none';
+                dataEl.textContent = step.data;
+                toggle.onclick = () => {
+                    const open = dataEl.style.display !== 'none';
+                    dataEl.style.display = open ? 'none' : 'block';
+                    toggle.textContent = open
+                        ? `Show details (${step.data.length} chars)`
+                        : `Hide details`;
+                };
+                div.appendChild(toggle);
+                div.appendChild(dataEl);
+            }
+            body.appendChild(div);
+        });
+
+        document.getElementById('traceModal').classList.add('open');
+    }
+
+    function closeTrace() {
+        document.getElementById('traceModal').classList.remove('open');
+        // Reload so updated badges/dismissals are reflected
+        window.location.reload();
     }
 
     async function syncUklaf() {
@@ -1112,12 +1228,18 @@
     document.getElementById('postcodeModal').addEventListener('click', function(e) {
         if (e.target === this) closePostcode();
     });
+    document.getElementById('traceModal').addEventListener('click', function(e) {
+        if (e.target === this) closeTrace();
+    });
 
     // Escape key closes modals
     document.addEventListener('keydown', function(e) {
         if (e.key === 'Escape') {
             closeNotes();
             closePostcode();
+            if (document.getElementById('traceModal').classList.contains('open')) {
+                closeTrace();
+            }
         }
     });
 
