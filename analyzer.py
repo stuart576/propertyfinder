@@ -11,10 +11,14 @@ For each property determines:
 
 Non-detached results trigger auto-dismiss (only on first analysis).
 """
+import gzip
+import io
 import json
 import logging
 import os
 import re
+import zlib
+from urllib.parse import urlparse
 from urllib.request import Request, urlopen
 from urllib.error import HTTPError, URLError
 
@@ -29,10 +33,46 @@ ANTHROPIC_API_KEY = os.getenv("ANTHROPIC_API_KEY", "")
 ANTHROPIC_MODEL = os.getenv("ANTHROPIC_MODEL", "claude-haiku-4-5-20251001")
 ANTHROPIC_URL = "https://api.anthropic.com/v1/messages"
 
+# Look like recent desktop Chrome on Windows. Bot defences inspect the full
+# header set (Sec-Fetch-*, Sec-CH-UA, Accept-Encoding) — not just User-Agent.
 _USER_AGENT = (
     "Mozilla/5.0 (Windows NT 10.0; Win64; x64) "
-    "AppleWebKit/537.36 (KHTML, like Gecko) Chrome/120.0.0.0 Safari/537.36"
+    "AppleWebKit/537.36 (KHTML, like Gecko) Chrome/131.0.0.0 Safari/537.36"
 )
+
+_BROWSER_HEADERS = {
+    "User-Agent": _USER_AGENT,
+    "Accept": (
+        "text/html,application/xhtml+xml,application/xml;q=0.9,"
+        "image/avif,image/webp,image/apng,*/*;q=0.8"
+    ),
+    "Accept-Language": "en-GB,en;q=0.9",
+    "Accept-Encoding": "gzip, deflate",
+    "Cache-Control": "max-age=0",
+    "Upgrade-Insecure-Requests": "1",
+    "Sec-Fetch-Dest": "document",
+    "Sec-Fetch-Mode": "navigate",
+    "Sec-Fetch-Site": "none",
+    "Sec-Fetch-User": "?1",
+    "Sec-Ch-Ua": '"Chromium";v="131", "Not_A Brand";v="24", "Google Chrome";v="131"',
+    "Sec-Ch-Ua-Mobile": "?0",
+    "Sec-Ch-Ua-Platform": '"Windows"',
+    "DNT": "1",
+    "Connection": "keep-alive",
+}
+
+
+def _decompress(data: bytes, encoding: str) -> bytes:
+    """Decompress gzip/deflate response bodies."""
+    enc = (encoding or "").lower()
+    if enc == "gzip":
+        return gzip.GzipFile(fileobj=io.BytesIO(data)).read()
+    if enc == "deflate":
+        try:
+            return zlib.decompress(data)
+        except zlib.error:
+            return zlib.decompress(data, -zlib.MAX_WBITS)
+    return data
 
 NON_DETACHED_TYPES = {"semi-detached", "terrace", "other"}
 
@@ -77,18 +117,52 @@ def classify_type_heuristic(text: str) -> str | None:
     return None
 
 
-def fetch_listing_text(url: str, max_chars: int = 8000) -> str:
+def fetch_listing_text(url: str, max_chars: int = 8000, steps: list | None = None) -> str:
     """Fetch a listing page and return cleaned text content."""
     if not url:
+        if steps is not None:
+            _add_step(steps, "Fetch failed", "No URL provided", level="error")
         return ""
     try:
-        req = Request(url, method="GET")
-        req.add_header("User-Agent", _USER_AGENT)
-        req.add_header("Accept", "text/html,application/xhtml+xml")
+        # Build a request that looks like real Chrome — sites like Rightmove,
+        # Zoopla and OnTheMarket use bot-detection that inspects the full
+        # header set, not just User-Agent.
+        headers = dict(_BROWSER_HEADERS)
+        # Set a plausible Referer (Google) for first-visit navigation
+        host = urlparse(url).netloc
+        if host:
+            headers["Referer"] = "https://www.google.com/"
+        req = Request(url, headers=headers, method="GET")
         with urlopen(req, timeout=15) as resp:
-            html = resp.read(500_000).decode("utf-8", errors="ignore")
-    except (HTTPError, URLError, OSError) as e:
-        logger.debug(f"Failed to fetch listing {url}: {e}")
+            raw = resp.read(2_000_000)
+            encoding = resp.headers.get("Content-Encoding", "")
+            try:
+                raw = _decompress(raw, encoding)
+            except (OSError, zlib.error) as e:
+                logger.debug(f"Decompression failed for {url}: {e}")
+            html = raw.decode("utf-8", errors="ignore")
+    except HTTPError as e:
+        body = ""
+        try:
+            body = e.read().decode("utf-8", errors="ignore")[:500]
+        except Exception:
+            pass
+        msg = f"HTTP {e.code} {e.reason}"
+        logger.debug(f"Failed to fetch listing {url}: {msg}")
+        if steps is not None:
+            _add_step(steps, "Fetch failed", msg, data=body, level="error")
+        return ""
+    except URLError as e:
+        msg = f"URLError: {e.reason}"
+        logger.debug(f"Failed to fetch listing {url}: {msg}")
+        if steps is not None:
+            _add_step(steps, "Fetch failed", msg, level="error")
+        return ""
+    except OSError as e:
+        msg = f"OSError: {e}"
+        logger.debug(f"Failed to fetch listing {url}: {msg}")
+        if steps is not None:
+            _add_step(steps, "Fetch failed", msg, level="error")
         return ""
 
     try:
@@ -100,6 +174,8 @@ def fetch_listing_text(url: str, max_chars: int = 8000) -> str:
         return text[:max_chars]
     except Exception as e:
         logger.debug(f"Failed to extract text from {url}: {e}")
+        if steps is not None:
+            _add_step(steps, "Text extraction failed", str(e), level="error")
         return ""
 
 
@@ -243,15 +319,13 @@ def analyze_property(prop: dict, steps: list | None = None) -> dict:
     _add_step(s, "Decision", "Heuristic incomplete — falling back to AI")
     _add_step(s, "Fetching listing page", prop["url"])
 
-    listing_text = fetch_listing_text(prop["url"])
+    listing_text = fetch_listing_text(prop["url"], steps=s)
     if listing_text:
         _add_step(
             s, "Fetched listing text",
             f"{len(listing_text)} chars",
             data=listing_text,
         )
-    else:
-        _add_step(s, "Fetch failed", "Could not retrieve listing page", level="warn")
 
     ai_result = analyze_with_ai(listing_text, steps=s) if listing_text else None
 
