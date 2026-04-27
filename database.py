@@ -82,6 +82,17 @@ def init_db():
         conn.execute("ALTER TABLE properties ADD COLUMN longitude REAL")
         conn.commit()
 
+    # Migrate: AI/heuristic analysis columns
+    if "property_type" not in prop_cols:
+        conn.execute("ALTER TABLE properties ADD COLUMN property_type TEXT")
+        conn.commit()
+    if "analyzed_method" not in prop_cols:
+        conn.execute("ALTER TABLE properties ADD COLUMN analyzed_method TEXT")
+        conn.commit()
+    if "analyzed_at" not in prop_cols:
+        conn.execute("ALTER TABLE properties ADD COLUMN analyzed_at TIMESTAMP")
+        conn.commit()
+
     conn.close()
 
 
@@ -461,6 +472,94 @@ def cache_geocode(location_key: str, latitude: Optional[float], longitude: Optio
 def clear_geocode_cache():
     conn = get_connection()
     conn.execute("DELETE FROM geocode_cache")
+    conn.commit()
+    conn.close()
+
+
+def get_property(property_id: int) -> Optional[dict]:
+    """Fetch a single property by id."""
+    conn = get_connection()
+    row = conn.execute(
+        "SELECT * FROM properties WHERE id = ?", (property_id,)
+    ).fetchone()
+    conn.close()
+    return dict(row) if row else None
+
+
+def get_unanalyzed_properties(limit: int = 50) -> list[dict]:
+    """Get properties that have not yet been analyzed."""
+    conn = get_connection()
+    rows = conn.execute(
+        """SELECT id, title, description, url, acres, property_type
+           FROM properties
+           WHERE analyzed_at IS NULL
+           AND dismissed = 0
+           ORDER BY first_seen DESC
+           LIMIT ?""",
+        (limit,),
+    ).fetchall()
+    conn.close()
+    return [dict(r) for r in rows]
+
+
+def update_analysis(
+    property_id: int,
+    property_type: Optional[str],
+    acres: Optional[float],
+    method: str,
+    auto_dismiss: bool = False,
+):
+    """
+    Record the analysis result. If auto_dismiss is True, also flag the
+    property as dismissed (used for non-detached property types).
+    """
+    conn = get_connection()
+    if acres is not None:
+        if auto_dismiss:
+            conn.execute(
+                """UPDATE properties
+                   SET property_type = ?, analyzed_method = ?,
+                       analyzed_at = CURRENT_TIMESTAMP,
+                       acres = COALESCE(acres, ?), dismissed = 1
+                   WHERE id = ?""",
+                (property_type, method, acres, property_id),
+            )
+        else:
+            conn.execute(
+                """UPDATE properties
+                   SET property_type = ?, analyzed_method = ?,
+                       analyzed_at = CURRENT_TIMESTAMP,
+                       acres = COALESCE(acres, ?)
+                   WHERE id = ?""",
+                (property_type, method, acres, property_id),
+            )
+    else:
+        if auto_dismiss:
+            conn.execute(
+                """UPDATE properties
+                   SET property_type = ?, analyzed_method = ?,
+                       analyzed_at = CURRENT_TIMESTAMP, dismissed = 1
+                   WHERE id = ?""",
+                (property_type, method, property_id),
+            )
+        else:
+            conn.execute(
+                """UPDATE properties
+                   SET property_type = ?, analyzed_method = ?,
+                       analyzed_at = CURRENT_TIMESTAMP
+                   WHERE id = ?""",
+                (property_type, method, property_id),
+            )
+    conn.commit()
+    conn.close()
+
+
+def reset_analysis():
+    """Clear analysis fields so all properties get re-analyzed."""
+    conn = get_connection()
+    conn.execute(
+        "UPDATE properties SET property_type = NULL, analyzed_method = NULL, analyzed_at = NULL"
+    )
     conn.commit()
     conn.close()
 

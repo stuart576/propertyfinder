@@ -211,17 +211,37 @@ def sync_uklaf_route():
     """Scrape UKLAF listings and upsert into the database."""
     from uklaf_scraper import sync_uklaf
     from geocoder import geocode_properties, backfill_postcodes, geocode_all_unmatched
+    from analyzer import analyze_new_properties
     stats = sync_uklaf()
     backfill_postcodes()
     geocode_properties()
     geocode_all_unmatched()
+    analyze_new_properties()
     return jsonify(stats)
+
+
+@app.route("/api/analyze", methods=["POST"])
+def trigger_analyze():
+    from analyzer import analyze_new_properties
+    analyze_new_properties()
+    return jsonify({"ok": True})
+
+
+@app.route("/api/analyze/<int:property_id>", methods=["POST"])
+def analyze_one(property_id):
+    """Manually re-analyze a single property without auto-dismiss."""
+    from analyzer import analyze_property_by_id
+    result = analyze_property_by_id(property_id)
+    if result is None:
+        return jsonify({"ok": False, "error": "Property not found"}), 404
+    return jsonify({"ok": True, **result})
 
 
 @app.route("/api/reprocess", methods=["POST"])
 def reprocess():
     """Clear email log and reset images, then re-check all emails."""
     from geocoder import geocode_properties, backfill_postcodes, geocode_all_unmatched
+    from analyzer import analyze_new_properties
     database.clear_email_log()
     database.reset_images()
     database.reset_geocodes()
@@ -229,6 +249,7 @@ def reprocess():
     backfill_postcodes()
     geocode_properties()
     geocode_all_unmatched()
+    analyze_new_properties()
     return jsonify(stats)
 
 

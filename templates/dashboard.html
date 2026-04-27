@@ -820,6 +820,16 @@
                         <span class="match-tag unmatched">{{ prop.county|capitalize }}</span>
                     {% endif %}
                 {% endif %}
+
+                {% if prop.property_type %}
+                    {% if prop.property_type == 'detached' %}
+                        <span class="match-tag matched" title="Classified by {{ prop.analyzed_method or 'analysis' }}">🏠 detached</span>
+                    {% elif prop.property_type == 'unknown' %}
+                        <span class="match-tag missing" title="Could not determine property type">type unknown</span>
+                    {% else %}
+                        <span class="match-tag unmatched" title="Classified by {{ prop.analyzed_method or 'analysis' }}">{{ prop.property_type }}</span>
+                    {% endif %}
+                {% endif %}
             </div>
         </div>
 
@@ -835,6 +845,9 @@
                         style="padding: 0.25rem 0.5rem; font-size: 0.7rem;"
                         title="{% if is_geocoded %}Mapped ({{ prop.latitude|round(4) }}, {{ prop.longitude|round(4) }}){% if prop.postcode %} — {{ prop.postcode }}{% endif %}{% elif prop.postcode %}Postcode set but not yet geocoded: {{ prop.postcode }}{% else %}No postcode — click to set{% endif %}"
                         onclick="openPostcode({{ prop.id }}, '{{ prop.postcode or '' }}')">{% if is_geocoded %}📍{% elif prop.postcode %}⚠️{% else %}❓{% endif %}{% if prop.postcode %} {{ prop.postcode }}{% endif %}</button>
+                <button class="btn btn-outline" style="padding: 0.25rem 0.5rem; font-size: 0.7rem;"
+                        title="Analyse this listing with AI"
+                        onclick="analyzeProperty({{ prop.id }}, this)">🤖</button>
                 <button class="btn btn-outline" style="padding: 0.25rem 0.5rem; font-size: 0.7rem;"
                         onclick="openNotes({{ prop.id }}, '{{ prop.notes|replace("'", "\\'") }}')">📝</button>
                 <span class="card-date">{{ prop.first_seen[:10] if prop.first_seen else '' }}</span>
@@ -1022,6 +1035,29 @@
         } catch (e) {
             indicator.classList.remove('visible');
             showToast('Check failed — see logs');
+        }
+    }
+
+    async function analyzeProperty(id, btn) {
+        const original = btn.textContent;
+        btn.textContent = '⏳';
+        btn.disabled = true;
+        try {
+            const res = await fetch(`/api/analyze/${id}`, { method: 'POST' });
+            const data = await res.json();
+            if (data.ok) {
+                const acres = data.acres != null ? `, ${data.acres} acres` : '';
+                showToast(`${data.property_type}${acres} (${data.method})`);
+                setTimeout(() => window.location.reload(), 800);
+            } else {
+                showToast(data.error || 'Analysis failed');
+                btn.textContent = original;
+                btn.disabled = false;
+            }
+        } catch (e) {
+            showToast('Analysis failed — see logs');
+            btn.textContent = original;
+            btn.disabled = false;
         }
     }
 
