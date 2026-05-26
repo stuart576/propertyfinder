@@ -199,7 +199,9 @@ def _build_filter_clauses(
     """Build WHERE clause and params from filter arguments."""
     conditions = []
     params = []
-    if not show_dismissed:
+    if show_dismissed:
+        conditions.append("dismissed = 1")
+    else:
         conditions.append("dismissed = 0")
     if starred_only:
         conditions.append("starred = 1")
