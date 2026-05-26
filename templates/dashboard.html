@@ -334,6 +334,7 @@
         .icon-btn:hover { background: white; box-shadow: var(--shadow-sm); }
         .icon-btn.starred { color: var(--star); }
         .icon-btn.dismiss-btn:hover { color: var(--danger); }
+        .icon-btn.restore-btn:hover { color: var(--accent); }
 
         .card-body {
             padding: 1rem 1.15rem;
@@ -808,8 +809,13 @@
             <div class="card-actions-top">
                 <button class="icon-btn {% if prop.starred %}starred{% endif %}"
                         onclick="toggleStar({{ prop.id }}, this)" title="Star">★</button>
+                {% if show_dismissed %}
+                <button class="icon-btn restore-btn"
+                        onclick="toggleDismiss({{ prop.id }})" title="Restore">↺</button>
+                {% else %}
                 <button class="icon-btn dismiss-btn"
                         onclick="toggleDismiss({{ prop.id }})" title="Hide">✕</button>
+                {% endif %}
             </div>
         </div>
 
