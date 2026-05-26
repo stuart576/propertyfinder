@@ -87,9 +87,10 @@ Given the listing text, return ONLY a single JSON object with these fields:
   - "unknown": cannot determine from the text
 - "acres": number (acres of land/plot) or null if not stated
 - "has_land": boolean — true if it has meaningful outdoor land beyond a small garden
+- "postcode": full UK postcode (outward + inward, e.g. "HR1 2AB") or null if not found
 
 Output ONLY the JSON, no prose, no markdown fences. Example:
-{"property_type": "detached", "acres": 5.2, "has_land": true}
+{"property_type": "detached", "acres": 5.2, "has_land": true, "postcode": "HR1 2AB"}
 """
 
 
@@ -270,30 +271,38 @@ def analyze_with_ai(listing_text: str, steps: list | None = None) -> dict | None
     else:
         acres = None
 
+    # Validate any postcode returned via our regex (catches hallucinated ones)
+    raw_pc = result.get("postcode")
+    postcode = BaseParser.extract_postcode(raw_pc) if isinstance(raw_pc, str) else ""
+
     _add_step(
         s,
         "AI parsed",
-        f"property_type={pt} · acres={acres} · has_land={result.get('has_land')}",
+        f"property_type={pt} · acres={acres} · has_land={result.get('has_land')} · postcode={postcode or 'null'}",
     )
 
-    return {"property_type": pt, "acres": acres}
+    return {"property_type": pt, "acres": acres, "postcode": postcode}
 
 
 def analyze_property(prop: dict, steps: list | None = None) -> dict:
     """
     Run heuristic, then AI if needed. Returns dict with:
-      - property_type, acres, method ('heuristic'|'ai'|'none')
+      - property_type, acres, postcode, method ('heuristic'|'ai'|'none')
     Appends trace steps to `steps` if provided.
+
+    AI is triggered if any of property_type / acres / postcode is still
+    missing after the heuristic — so a single AI call fills every gap.
     """
     s = steps if steps is not None else []
 
     title = prop.get("title") or ""
     description = prop.get("description") or ""
-    combined = f"{title} {description}".strip()
+    location = prop.get("location") or ""
+    combined = f"{title} {location} {description}".strip()
 
     _add_step(
         s, "Heuristic input",
-        f"title + description = {len(combined)} chars",
+        f"title + location + description = {len(combined)} chars",
         data=combined,
     )
 
@@ -304,19 +313,45 @@ def analyze_property(prop: dict, steps: list | None = None) -> dict:
     h_acres = BaseParser.extract_acres(combined) if not existing_acres else existing_acres
     _add_step(
         s, "Heuristic acres",
-        f"{h_acres}" if h_acres is not None else "no match"
-        + ("" if not existing_acres else " (already in DB)"),
+        (f"{h_acres}" if h_acres is not None else "no match")
+        + (" (already in DB)" if existing_acres else ""),
     )
 
-    if h_type and h_acres is not None:
+    existing_pc = prop.get("postcode") or ""
+    h_postcode = existing_pc or BaseParser.extract_postcode_from_fields(title, location, description)
+    _add_step(
+        s, "Heuristic postcode",
+        (h_postcode or "no match")
+        + (" (already in DB)" if existing_pc else ""),
+    )
+
+    # AI is needed if anything is still missing
+    need_ai = (not h_type) or (h_acres is None) or (not h_postcode)
+
+    if not need_ai:
         _add_step(s, "Decision", "Heuristic complete — skipping AI")
-        return {"property_type": h_type, "acres": h_acres, "method": "heuristic"}
+        return {
+            "property_type": h_type,
+            "acres": h_acres,
+            "postcode": h_postcode,
+            "method": "heuristic",
+        }
 
     if not prop.get("url"):
         _add_step(s, "Decision", "No URL — cannot fetch for AI analysis", level="warn")
-        return {"property_type": h_type or "unknown", "acres": h_acres, "method": "heuristic"}
+        return {
+            "property_type": h_type or "unknown",
+            "acres": h_acres,
+            "postcode": h_postcode,
+            "method": "heuristic",
+        }
 
-    _add_step(s, "Decision", "Heuristic incomplete — falling back to AI")
+    missing_bits = ", ".join(
+        bit for bit, have in [
+            ("type", bool(h_type)), ("acres", h_acres is not None), ("postcode", bool(h_postcode))
+        ] if not have
+    )
+    _add_step(s, "Decision", f"Heuristic missing: {missing_bits} — falling back to AI")
     _add_step(s, "Fetching listing page", prop["url"])
 
     listing_text = fetch_listing_text(prop["url"], steps=s)
@@ -333,22 +368,24 @@ def analyze_property(prop: dict, steps: list | None = None) -> dict:
         final = {
             "property_type": ai_result["property_type"] or h_type or "unknown",
             "acres": ai_result["acres"] if ai_result["acres"] is not None else h_acres,
+            "postcode": ai_result.get("postcode") or h_postcode,
             "method": "ai",
         }
         _add_step(
             s, "Final classification",
-            f"{final['property_type']} · acres={final['acres']} (via AI)",
+            f"{final['property_type']} · acres={final['acres']} · postcode={final['postcode'] or 'unknown'} (via AI)",
         )
         return final
 
     final = {
         "property_type": h_type or "unknown",
         "acres": h_acres,
+        "postcode": h_postcode,
         "method": "heuristic",
     }
     _add_step(
         s, "Final classification",
-        f"{final['property_type']} · acres={final['acres']} (AI unavailable, fell back to heuristic)",
+        f"{final['property_type']} · acres={final['acres']} · postcode={final['postcode'] or 'unknown'} (AI unavailable, fell back to heuristic)",
         level="warn",
     )
     return final
@@ -374,12 +411,75 @@ def analyze_property_by_id(property_id: int, with_trace: bool = False):
         acres=result["acres"],
         method=result["method"],
         auto_dismiss=False,
+        postcode=result.get("postcode"),
     )
     logger.info(
         f"Manual analysis of property {property_id}: "
         f"{result['property_type']} (acres={result['acres']}, method={result['method']})"
     )
     return (result, steps) if with_trace else result
+
+
+def analyze_properties_missing_postcode(limit: int = 50) -> dict:
+    """
+    Run the full heuristic+AI analyzer on properties that have no postcode.
+    Same pipeline as analyze_new_properties but ignores analyzed_at so we
+    re-run on properties that were analyzed before postcode support existed.
+
+    Triggers geocoding for any newly extracted postcodes.
+
+    Returns stats: {"checked": N, "filled": N}.
+    """
+    conn = database.get_connection()
+    rows = conn.execute(
+        """SELECT id, title, location, description, url, acres, property_type, postcode
+           FROM properties
+           WHERE (postcode IS NULL OR postcode = '')
+           AND dismissed = 0
+           ORDER BY first_seen DESC
+           LIMIT ?""",
+        (limit,),
+    ).fetchall()
+    conn.close()
+    props = [dict(r) for r in rows]
+
+    if not props:
+        logger.info("No properties missing postcodes")
+        return {"checked": 0, "filled": 0}
+
+    logger.info(f"Running postcode analysis on {len(props)} properties...")
+
+    filled = 0
+    for prop in props:
+        try:
+            result = analyze_property(prop)
+        except Exception as e:
+            logger.warning(f"  Analysis failed for property {prop['id']}: {e}")
+            continue
+
+        # Don't auto-dismiss here — user explicitly asked us to find postcodes,
+        # not to filter the dataset.
+        database.update_analysis(
+            property_id=prop["id"],
+            property_type=result["property_type"],
+            acres=result["acres"],
+            method=result["method"],
+            auto_dismiss=False,
+            postcode=result.get("postcode"),
+        )
+        if result.get("postcode"):
+            filled += 1
+            logger.info(f"  Property {prop['id']}: postcode {result['postcode']} ({result['method']})")
+        else:
+            logger.info(f"  Property {prop['id']}: still no postcode")
+
+    # Geocode the newly populated postcodes
+    if filled:
+        from geocoder import geocode_properties
+        geocode_properties()
+
+    logger.info(f"Postcode analysis complete: {filled}/{len(props)} filled in")
+    return {"checked": len(props), "filled": filled}
 
 
 def analyze_new_properties(limit: int = 50):
@@ -405,6 +505,7 @@ def analyze_new_properties(limit: int = 50):
             acres=result["acres"],
             method=result["method"],
             auto_dismiss=auto_dismiss,
+            postcode=result.get("postcode"),
         )
         if auto_dismiss:
             dismissed_count += 1

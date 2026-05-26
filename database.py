@@ -510,48 +510,30 @@ def update_analysis(
     acres: Optional[float],
     method: str,
     auto_dismiss: bool = False,
+    postcode: Optional[str] = None,
 ):
     """
     Record the analysis result. If auto_dismiss is True, also flag the
     property as dismissed (used for non-detached property types).
+
+    acres / postcode are only filled in if the existing column is empty
+    (we never overwrite existing values).
     """
-    conn = get_connection()
+    sets = ["property_type = ?", "analyzed_method = ?", "analyzed_at = CURRENT_TIMESTAMP"]
+    params: list = [property_type, method]
     if acres is not None:
-        if auto_dismiss:
-            conn.execute(
-                """UPDATE properties
-                   SET property_type = ?, analyzed_method = ?,
-                       analyzed_at = CURRENT_TIMESTAMP,
-                       acres = COALESCE(acres, ?), dismissed = 1
-                   WHERE id = ?""",
-                (property_type, method, acres, property_id),
-            )
-        else:
-            conn.execute(
-                """UPDATE properties
-                   SET property_type = ?, analyzed_method = ?,
-                       analyzed_at = CURRENT_TIMESTAMP,
-                       acres = COALESCE(acres, ?)
-                   WHERE id = ?""",
-                (property_type, method, acres, property_id),
-            )
-    else:
-        if auto_dismiss:
-            conn.execute(
-                """UPDATE properties
-                   SET property_type = ?, analyzed_method = ?,
-                       analyzed_at = CURRENT_TIMESTAMP, dismissed = 1
-                   WHERE id = ?""",
-                (property_type, method, property_id),
-            )
-        else:
-            conn.execute(
-                """UPDATE properties
-                   SET property_type = ?, analyzed_method = ?,
-                       analyzed_at = CURRENT_TIMESTAMP
-                   WHERE id = ?""",
-                (property_type, method, property_id),
-            )
+        sets.append("acres = COALESCE(acres, ?)")
+        params.append(acres)
+    if postcode:
+        sets.append("postcode = CASE WHEN postcode IS NULL OR postcode = '' THEN ? ELSE postcode END")
+        params.append(postcode)
+    if auto_dismiss:
+        sets.append("dismissed = 1")
+    params.append(property_id)
+
+    sql = f"UPDATE properties SET {', '.join(sets)} WHERE id = ?"
+    conn = get_connection()
+    conn.execute(sql, params)
     conn.commit()
     conn.close()
 

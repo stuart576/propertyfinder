@@ -247,6 +247,8 @@
 <div class="header">
     <h1>Property <span>Finder</span></h1>
     <div class="header-actions">
+        <button class="btn btn-primary" onclick="parsePostcodes(this)"
+                title="Run the analyzer (heuristic then AI) on properties missing postcodes">📍 Parse Postcodes</button>
         <a href="/" class="btn btn-ghost">Grid View</a>
         <a href="/map" class="btn btn-ghost active">Map View</a>
         <a href="/emails" class="btn btn-ghost">Emails</a>
@@ -265,6 +267,24 @@
 <script src="https://unpkg.com/leaflet@1.9.4/dist/leaflet.js"></script>
 <script src="https://unpkg.com/leaflet.markercluster@1.5.3/dist/leaflet.markercluster.js"></script>
 <script>
+    async function parsePostcodes(btn) {
+        const original = btn.textContent;
+        btn.textContent = '⏳ Parsing…';
+        btn.disabled = true;
+        try {
+            const res = await fetch('/api/parse-postcodes', { method: 'POST' });
+            const data = await res.json();
+            btn.textContent = original;
+            btn.disabled = false;
+            alert(`Parsed ${data.checked} properties — filled in ${data.filled} postcodes`);
+            if (data.filled > 0) window.location.reload();
+        } catch (e) {
+            btn.textContent = original;
+            btn.disabled = false;
+            alert('Postcode parsing failed — see logs');
+        }
+    }
+
     const map = L.map('map').setView([52.1, -2.7], 9);
 
     L.tileLayer('https://{s}.tile.openstreetmap.org/{z}/{x}/{y}.png', {

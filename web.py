@@ -227,6 +227,14 @@ def trigger_analyze():
     return jsonify({"ok": True})
 
 
+@app.route("/api/parse-postcodes", methods=["POST"])
+def parse_postcodes():
+    """Run the analyzer on properties missing postcodes (heuristic + AI)."""
+    from analyzer import analyze_properties_missing_postcode
+    stats = analyze_properties_missing_postcode(limit=50)
+    return jsonify(stats)
+
+
 @app.route("/api/analyze/<int:property_id>", methods=["POST"])
 def analyze_one(property_id):
     """Manually re-analyze a single property without auto-dismiss. Returns trace."""
